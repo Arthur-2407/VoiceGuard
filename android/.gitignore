@@ -1,0 +1,19 @@
+# Gradle and Android Studio Generated Files
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.cxx/
+.externalNativeBuild/
+captures/
+generated/
+intermediates/
+outputs/
+test-results/
+lint-results/
+*.apk
+*.aab
+generate_icons.py
+*.zip
+generate_icons.py

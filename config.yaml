@@ -1,0 +1,80 @@
+audio:
+  sample_rate: 16000
+  chunk_duration_sec: 2.0
+  overlap_ratio: 0.5
+  channels: 1
+  format: float32
+  # VAD aggressiveness: 0 (least aggressive) to 3 (most aggressive)
+  vad_aggressiveness: 2
+
+detection:
+  # Path to trained detector weights (relative to project root)
+  model_path: "backend/models/weights/detector.pt"
+  # Device: "auto" selects GPU if available, else CPU
+  device: "auto"
+  batch_size: 1
+  # Number of mel bands for log-mel spectrogram
+  n_mels: 80
+  # Number of MFCC coefficients
+  n_mfcc: 40
+  # Use wav2vec2 embeddings (requires internet on first run to download)
+  use_wav2vec2: true
+  wav2vec2_model: "facebook/wav2vec2-base"
+  # Use SpeechBrain ECAPA speaker embeddings
+  use_speaker_embedding: true
+  ecapa_model: "speechbrain/spkrec-ecapa-voxceleb"
+
+risk:
+  # Number of chunks to keep in rolling window for aggregation
+  window_size: 5
+  # Weight of detection score vs. speaker consistency (must sum to 1.0)
+  detection_weight: 0.70
+  consistency_weight: 0.30
+  # Alert thresholds (risk score 0.0–1.0)
+  alert_thresholds:
+    low: 0.35
+    medium: 0.60
+    high: 0.80
+
+speaker:
+  # ECAPA embedding dimension
+  embedding_dim: 192
+  # Cosine similarity below this = speaker identity mismatch
+  consistency_threshold: 0.75
+
+privacy:
+  # If false, raw audio chunks are NEVER written to disk
+  retain_audio: false
+  # If true, only feature vectors + scores are logged (no raw audio)
+  log_features_only: true
+  # Audit log location
+  audit_log_path: "data/audit.log"
+
+storage:
+  db_path: "data/voiceguard.db"
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "http://127.0.0.1:8080"
+    - "null"
+
+upload:
+  # Maximum file size in bytes for uploaded media (default: 200 MB)
+  max_file_size_bytes: 209715200
+  # Maximum audio duration in seconds to process (0 = no limit)
+  max_duration_sec: 600
+
+webhooks:
+  enabled: false
+  callback_url: ""
+  secret_token: ""
+  retry_attempts: 3
+  retry_delay_sec: 2.0
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

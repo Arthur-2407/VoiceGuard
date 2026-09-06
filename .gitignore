@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Data and Models
+# Database is dynamically generated, do not commit.
+*.db
+*.sqlite3
+*.db-shm
+*.db-wal
+# Ignoring downloaded weights since they are reproducible via download_models.py
+backend/models/weights/
+
+# Build and Cache
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Logs and Temporary files
+*.log
+tmp/
+temp/
+
+# VoiceGuard specific temporary test outputs
+*_out.mp3
+test.mp3
+test_out.mp3
+scratch_test_zeroconf.py
+test_heuristic.py
+test_integration.py
+test_torchaudio.py
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

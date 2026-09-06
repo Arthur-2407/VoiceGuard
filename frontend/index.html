@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceGuard — AI Voice Cloning Detection</title>
+  <meta name="description" content="Real-time AI-powered detection and prevention of voice cloning impersonation attacks. Built for SIH 2026." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-brand">
+      <div class="nav-logo">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="14" cy="14" r="12" stroke="url(#logoGrad)" stroke-width="2"/>
+          <path d="M9 14 Q14 8 19 14 Q14 20 9 14Z" fill="url(#logoGrad)" opacity="0.8"/>
+          <circle cx="14" cy="14" r="3" fill="url(#logoGrad)"/>
+          <defs>
+            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#6366f1"/>
+              <stop offset="100%" style="stop-color:#8b5cf6"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="brand-name">VoiceGuard</span>
+        <span class="brand-badge">AI</span>
+      </div>
+    </div>
+    <div class="nav-links">
+      <button class="nav-link active" onclick="showTab('monitor')" id="tab-monitor">Live Monitor</button>
+      <button class="nav-link" onclick="showTab('analyze')" id="tab-analyze">File Analysis</button>
+      <button class="nav-link" onclick="showTab('enroll')" id="tab-enroll">Speaker Enroll</button>
+      <button class="nav-link" onclick="showTab('history')" id="tab-history">Alert History</button>
+    </div>
+    <div class="nav-status">
+      <div class="status-indicator" id="system-status">
+        <div class="status-dot offline"></div>
+        <span>Connecting...</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- ── TAB: LIVE MONITOR ── -->
+    <div class="tab-panel active" id="panel-monitor">
+      <div class="monitor-grid">
+
+        <!-- Risk Gauge Card -->
+        <div class="card glass risk-card" id="risk-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Real-Time Risk Score
+            </h2>
+            <div class="session-badge" id="session-label">No Session</div>
+          </div>
+
+          <div class="gauge-container">
+            <canvas id="gaugeCanvas" width="280" height="160"></canvas>
+            <div class="gauge-value" id="gauge-value">0.00</div>
+            <div class="gauge-label" id="gauge-label">SCANNING...</div>
+          </div>
+
+          <div class="risk-meta">
+            <div class="risk-stat">
+              <span class="stat-label">Peak</span>
+              <span class="stat-value" id="peak-risk">—</span>
+            </div>
+            <div class="risk-stat">
+              <span class="stat-label">Mean</span>
+              <span class="stat-value" id="mean-risk">—</span>
+            </div>
+            <div class="risk-stat">
+              <span class="stat-label">Chunks</span>
+              <span class="stat-value" id="chunk-count">0</span>
+            </div>
+            <div class="risk-stat">
+              <span class="stat-label">Latency</span>
+              <span class="stat-value" id="latency">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alert Panel -->
+        <div class="card glass alert-card" id="alert-card-main">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Alert Status
+            </h2>
+          </div>
+
+          <div class="alert-display" id="alert-display">
+            <div class="alert-icon-wrap safe" id="alert-icon-wrap">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+            </div>
+            <div class="alert-content">
+              <h3 class="alert-title" id="alert-title">System Ready</h3>
+              <p class="alert-message" id="alert-message">Start a live session or upload an audio file to begin analysis.</p>
+            </div>
+            <div class="alert-actions" id="alert-actions"></div>
+          </div>
+        </div>
+
+        <!-- Waveform / Risk Timeline -->
+        <div class="card glass timeline-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Risk Timeline
+            </h2>
+            <div class="timeline-controls">
+              <button class="btn btn-xs" id="clear-timeline" onclick="clearTimeline()">Clear</button>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="riskTimeline"></canvas>
+          </div>
+        </div>
+
+        <!-- Live Session Controls -->
+        <div class="card glass controls-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Live Session Controls
+            </h2>
+          </div>
+
+          <div class="controls-body">
+            <div class="speaker-select-wrap">
+              <label class="form-label">Speaker Profile (Optional)</label>
+              <select class="form-select" id="live-speaker-id">
+                <option value="">None (No Consistency Check)</option>
+              </select>
+              <button class="btn btn-xs btn-secondary" onclick="refreshSpeakers()">↻ Refresh</button>
+            </div>
+
+            <div class="session-buttons">
+              <button class="btn btn-primary btn-lg" id="start-live-btn" onclick="startLiveSession()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                Start Live Analysis
+              </button>
+              <button class="btn btn-danger btn-lg hidden" id="stop-live-btn" onclick="stopLiveSession()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                Stop Session
+              </button>
+            </div>
+
+            <div class="live-indicator hidden" id="live-indicator">
+              <div class="pulse-dot"></div>
+              <span>LIVE — Analyzing audio stream...</span>
+            </div>
+
+            <div class="ws-log" id="ws-log">
+              <div class="log-entry info">System initialized. Ready to begin analysis.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Speaker Consistency -->
+        <div class="card glass consistency-card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Speaker Identity
+            </h2>
+          </div>
+          <div class="consistency-display">
+            <div class="identity-meter">
+              <div class="identity-bar-bg">
+                <div class="identity-bar" id="identity-bar" style="width: 0%"></div>
+              </div>
+              <span class="identity-pct" id="identity-pct">—</span>
+            </div>
+            <div class="identity-labels">
+              <span>Mismatch</span>
+              <span>Match</span>
+            </div>
+            <div class="identity-status" id="identity-status">No enrolled speaker</div>
+          </div>
+
+          <div class="feature-pills" id="feature-pills">
+            <div class="feature-pill active" id="pill-mfcc">MFCC</div>
+            <div class="feature-pill active" id="pill-mel">Log-Mel</div>
+            <div class="feature-pill active" id="pill-prosodic">Prosodic</div>
+            <div class="feature-pill" id="pill-wav2vec">Wav2Vec2</div>
+            <div class="feature-pill" id="pill-speaker">ECAPA</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── TAB: FILE ANALYSIS ── -->
+    <div class="tab-panel hidden" id="panel-analyze">
+      <div class="analyze-grid">
+        <div class="card glass upload-card">
+          <div class="card-header">
+            <h2 class="card-title">Upload Audio File</h2>
+          </div>
+          <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+               ondragover="onDragOver(event)" ondrop="onDrop(event)">
+            <input type="file" id="file-input" accept="audio/*,video/*" style="display:none" onchange="onFileSelect(event)" />
+            <div class="upload-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <p class="upload-text">Drop audio or video file here or click to browse</p>
+            <p class="upload-hint">Audio &amp; video supported — audio will be extracted &amp; normalized automatically<br><small>MP3, WAV, M4A, FLAC, OGG, MP4, MKV, MOV, AVI, WebM and more</small></p>
+            <div class="file-selected hidden" id="file-selected"></div>
+          </div>
+
+          <div class="analyze-options">
+            <label class="form-label">Speaker Profile (Optional)</label>
+            <select class="form-select" id="analyze-speaker-id">
+              <option value="">None</option>
+            </select>
+          </div>
+
+          <button class="btn btn-primary btn-full" id="analyze-btn" onclick="analyzeFile()" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Analyze Audio
+          </button>
+        </div>
+
+        <div class="card glass results-card" id="results-card">
+          <div class="card-header">
+            <h2 class="card-title">Analysis Results</h2>
+          </div>
+          <div class="results-body" id="results-body">
+            <div class="results-empty">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <p>No analysis results yet</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: SPEAKER ENROLLMENT ── -->
+    <div class="tab-panel hidden" id="panel-enroll">
+      <div class="enroll-grid">
+        <div class="card glass enroll-card">
+          <div class="card-header">
+            <h2 class="card-title">Enroll Speaker Profile</h2>
+          </div>
+          <div class="enroll-info">
+            <div class="info-callout">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>Upload 5+ reference audio files for best accuracy (per NeurIPS 2018 research)</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Full Name *</label>
+            <input class="form-input" type="text" id="enroll-name" placeholder="e.g. Rajesh Kumar" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Organization</label>
+            <input class="form-input" type="text" id="enroll-org" placeholder="e.g. State Bank of India" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <input class="form-input" type="text" id="enroll-role" placeholder="e.g. Branch Manager" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Speaker ID (optional, auto-generated if empty)</label>
+            <input class="form-input" type="text" id="enroll-id" placeholder="e.g. spk_rm_001" />
+          </div>
+
+          <div class="upload-zone-sm" id="enroll-zone" onclick="document.getElementById('enroll-files').click()"
+               ondragover="onDragOver(event)" ondrop="onEnrollDrop(event)">
+            <input type="file" id="enroll-files" accept="audio/*" multiple style="display:none" onchange="onEnrollFilesSelected(event)" />
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p>Click or drop reference audio files</p>
+            <div id="enroll-file-count" class="file-count-badge hidden"></div>
+          </div>
+
+          <button class="btn btn-primary btn-full" id="enroll-btn" onclick="enrollSpeaker()" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><line x1="12" y1="3" x2="12" y2="9"/><line x1="9" y1="6" x2="15" y2="6"/></svg>
+            Enroll Speaker
+          </button>
+
+          <div class="enroll-result hidden" id="enroll-result"></div>
+        </div>
+
+        <div class="card glass speakers-list-card">
+          <div class="card-header">
+            <h2 class="card-title">Enrolled Speakers</h2>
+            <button class="btn btn-xs" onclick="loadSpeakers()">↻ Refresh</button>
+          </div>
+          <div class="speakers-list" id="speakers-list">
+            <div class="speakers-empty">No speakers enrolled yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: ALERT HISTORY ── -->
+    <div class="tab-panel hidden" id="panel-history">
+      <div class="history-grid">
+        <div class="card glass history-card">
+          <div class="card-header">
+            <h2 class="card-title">Recent Alert History</h2>
+            <button class="btn btn-xs" onclick="loadAlerts()">↻ Refresh</button>
+          </div>
+          <div class="history-table-wrap" id="history-table-wrap">
+            <div class="history-empty">No alerts recorded yet.</div>
+          </div>
+        </div>
+
+        <div class="card glass threshold-card">
+          <div class="card-header">
+            <h2 class="card-title">Alert Thresholds</h2>
+          </div>
+          <div class="threshold-body">
+            <div class="threshold-row">
+              <label class="form-label threshold-label safe">LOW Alert</label>
+              <input class="form-input threshold-input" type="number" id="thr-low" step="0.05" min="0" max="1" value="0.35" />
+            </div>
+            <div class="threshold-row">
+              <label class="form-label threshold-label medium">MEDIUM Alert</label>
+              <input class="form-input threshold-input" type="number" id="thr-medium" step="0.05" min="0" max="1" value="0.60" />
+            </div>
+            <div class="threshold-row">
+              <label class="form-label threshold-label high">HIGH Alert</label>
+              <input class="form-input threshold-input" type="number" id="thr-high" step="0.05" min="0" max="1" value="0.80" />
+            </div>
+            <button class="btn btn-primary btn-full" onclick="updateThresholds()">Apply Thresholds</button>
+            <div class="threshold-result hidden" id="threshold-result"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
