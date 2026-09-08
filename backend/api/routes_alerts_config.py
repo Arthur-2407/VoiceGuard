@@ -40,6 +40,7 @@ class ThresholdUpdateRequest(BaseModel):
     low: float = Field(ge=0.0, le=1.0, description="LOW alert threshold")
     medium: float = Field(ge=0.0, le=1.0, description="MEDIUM alert threshold")
     high: float = Field(ge=0.0, le=1.0, description="HIGH alert threshold")
+    critical: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="CRITICAL alert threshold")
 
 
 @config_router.get("/thresholds")
@@ -50,6 +51,7 @@ async def get_thresholds():
         "low": app_settings.risk.alert_thresholds.low,
         "medium": app_settings.risk.alert_thresholds.medium,
         "high": app_settings.risk.alert_thresholds.high,
+        "critical": app_settings.risk.alert_thresholds.critical,
     }
 
 
@@ -58,21 +60,26 @@ async def update_thresholds(body: ThresholdUpdateRequest):
     """Update alert thresholds at runtime (without restart)."""
     from backend.main import app_settings
 
-    if not (body.low < body.medium < body.high):
+    new_critical = body.critical if body.critical is not None else app_settings.risk.alert_thresholds.critical
+
+    if not (body.low < body.medium < body.high < new_critical):
         raise HTTPException(
             status_code=422,
-            detail="Thresholds must satisfy: low < medium < high"
+            detail=f"Thresholds must satisfy: low < medium < high < critical (got {body.low} < {body.medium} < {body.high} < {new_critical})"
         )
 
     app_settings.risk.alert_thresholds.low = body.low
     app_settings.risk.alert_thresholds.medium = body.medium
     app_settings.risk.alert_thresholds.high = body.high
+    if body.critical is not None:
+        app_settings.risk.alert_thresholds.critical = body.critical
 
     return {
         "message": "Thresholds updated.",
         "low": body.low,
         "medium": body.medium,
         "high": body.high,
+        "critical": app_settings.risk.alert_thresholds.critical,
     }
 
 
@@ -100,6 +107,7 @@ async def get_system_status():
                 "low": app_settings.risk.alert_thresholds.low,
                 "medium": app_settings.risk.alert_thresholds.medium,
                 "high": app_settings.risk.alert_thresholds.high,
+                "critical": app_settings.risk.alert_thresholds.critical,
             },
         },
     }

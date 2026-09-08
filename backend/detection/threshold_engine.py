@@ -7,6 +7,9 @@ produces actionable recommendations for frontline staff.
 Implements the SIH requirement for:
 "Threshold-based alerting logic configurable for different risk scenarios"
 "Pre-transaction warning prompts recommending secondary verification"
+
+Alert levels (ascending severity):
+  SAFE → LOW → MEDIUM → HIGH → CRITICAL
 """
 
 from __future__ import annotations
@@ -80,6 +83,25 @@ _RECOMMENDATIONS = {
         ],
         color="#ef4444",  # red
     ),
+    AlertLevel.CRITICAL: AlertRecommendation(
+        alert_level=AlertLevel.CRITICAL,
+        risk_score=0.0,
+        title="🔴 CRITICAL — Confirmed Voice Cloning Attack",
+        message=(
+            "Maximum confidence of AI-synthesised or cloned voice. "
+            "Active social engineering attack in progress."
+        ),
+        actions=[
+            "TERMINATE the call immediately",
+            "Lock the caller's associated accounts NOW",
+            "DO NOT disclose any information under any circumstances",
+            "Contact security operations centre immediately",
+            "Preserve all call metadata for forensic analysis",
+            "Escalate to incident response team — P1 severity",
+            "Initiate full security audit of recent transactions",
+        ],
+        color="#7f1d1d",  # deep red
+    ),
 }
 
 
@@ -94,17 +116,21 @@ class ThresholdEngine:
         threshold_low: float = 0.35,
         threshold_medium: float = 0.60,
         threshold_high: float = 0.80,
+        threshold_critical: float = 0.95,
     ):
         self.threshold_low = threshold_low
         self.threshold_medium = threshold_medium
         self.threshold_high = threshold_high
+        self.threshold_critical = threshold_critical
         self._previous_level: AlertLevel = AlertLevel.SAFE
 
     def evaluate(self, risk_score: float) -> AlertRecommendation:
         """
-        Evaluate a risk score and return an ActionableRecommendation.
+        Evaluate a risk score and return an AlertRecommendation.
         """
-        if risk_score >= self.threshold_high:
+        if risk_score >= self.threshold_critical:
+            level = AlertLevel.CRITICAL
+        elif risk_score >= self.threshold_high:
             level = AlertLevel.HIGH
         elif risk_score >= self.threshold_medium:
             level = AlertLevel.MEDIUM
@@ -127,10 +153,11 @@ class ThresholdEngine:
     def has_escalated(self, new_level: AlertLevel) -> bool:
         """Return True if alert level has increased since last call."""
         level_order = {
-            AlertLevel.SAFE: 0,
-            AlertLevel.LOW: 1,
-            AlertLevel.MEDIUM: 2,
-            AlertLevel.HIGH: 3,
+            AlertLevel.SAFE:     0,
+            AlertLevel.LOW:      1,
+            AlertLevel.MEDIUM:   2,
+            AlertLevel.HIGH:     3,
+            AlertLevel.CRITICAL: 4,
         }
         escalated = level_order[new_level] > level_order[self._previous_level]
         self._previous_level = new_level
@@ -141,8 +168,10 @@ class ThresholdEngine:
         low: float,
         medium: float,
         high: float,
+        critical: float = 0.95,
     ) -> None:
         """Dynamically update thresholds (from config API)."""
         self.threshold_low = low
         self.threshold_medium = medium
         self.threshold_high = high
+        self.threshold_critical = critical

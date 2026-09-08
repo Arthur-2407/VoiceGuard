@@ -24,7 +24,16 @@ import java.net.URL
 import java.util.concurrent.TimeUnit
 
 enum class ConnectionState {
-    DISCONNECTED, DISCOVERING, CONNECTING, CONNECTED, ERROR
+    DISCONNECTED, 
+    NETWORK_UNAVAILABLE, 
+    DISCOVERING, 
+    DISCOVERY_TIMEOUT, 
+    NODE_FOUND, 
+    VALIDATING, 
+    BACKEND_UNREACHABLE, 
+    BACKEND_UNHEALTHY, 
+    CONNECTED, 
+    ERROR
 }
 
 class ConnectionManager(private val context: Context) {
@@ -64,7 +73,8 @@ class ConnectionManager(private val context: Context) {
             override fun onAvailable(network: Network) {
                 Log.d("ConnectionManager", "Network available")
                 CoroutineScope(Dispatchers.Main).launch {
-                    if (_connectionState.value == ConnectionState.DISCONNECTED || _connectionState.value == ConnectionState.ERROR) {
+                    val currentState = _connectionState.value
+                    if (currentState == ConnectionState.DISCONNECTED || currentState == ConnectionState.ERROR || currentState == ConnectionState.NETWORK_UNAVAILABLE) {
                         startDiscovery()
                     }
                 }
@@ -73,11 +83,9 @@ class ConnectionManager(private val context: Context) {
             override fun onLost(network: Network) {
                 Log.d("ConnectionManager", "Network lost")
                 CoroutineScope(Dispatchers.Main).launch {
-                    if (_connectionState.value == ConnectionState.CONNECTED) {
-                        _connectionState.value = ConnectionState.DISCONNECTED
-                        _serverUrl.value = null
-                        api = null
-                    }
+                    _connectionState.value = ConnectionState.NETWORK_UNAVAILABLE
+                    _serverUrl.value = null
+                    api = null
                 }
             }
         }
@@ -89,17 +97,28 @@ class ConnectionManager(private val context: Context) {
     }
 
     fun startDiscovery() {
-        if (_connectionState.value == ConnectionState.DISCOVERING || _connectionState.value == ConnectionState.CONNECTED) return
+        val currentState = _connectionState.value
+        if (currentState == ConnectionState.DISCOVERING || currentState == ConnectionState.CONNECTED || currentState == ConnectionState.NODE_FOUND || currentState == ConnectionState.VALIDATING) return
+
+        val activeNetwork = connectivityManager?.activeNetwork
+        val caps = connectivityManager?.getNetworkCapabilities(activeNetwork)
+        val hasNetwork = caps != null && (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) || caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR))
+        
+        if (!hasNetwork) {
+            _connectionState.value = ConnectionState.NETWORK_UNAVAILABLE
+            return
+        }
+
         _connectionState.value = ConnectionState.DISCOVERING
         isResolving = false
 
         // Timeout mechanism
         discoveryJob?.cancel()
         discoveryJob = CoroutineScope(Dispatchers.Main).launch {
-            delay(5000) // 5 seconds timeout
+            delay(8000) // 8 seconds timeout
             if (_connectionState.value == ConnectionState.DISCOVERING) {
                 Log.e("ConnectionManager", "Discovery timed out")
-                _connectionState.value = ConnectionState.ERROR
+                _connectionState.value = ConnectionState.DISCOVERY_TIMEOUT
                 stopDiscovery()
             }
         }
@@ -116,6 +135,12 @@ class ConnectionManager(private val context: Context) {
                 if (service.serviceType.contains("_voiceguard._tcp")) {
                     if (isResolving) return // Prevent concurrent resolution crashes
                     isResolving = true
+                    
+                    CoroutineScope(Dispatchers.Main).launch {
+                        if (_connectionState.value == ConnectionState.DISCOVERING) {
+                            _connectionState.value = ConnectionState.NODE_FOUND
+                        }
+                    }
 
                     try {
                         nsdManager?.resolveService(service, object : NsdManager.ResolveListener {
@@ -187,7 +212,7 @@ class ConnectionManager(private val context: Context) {
         if (_connectionState.value == ConnectionState.CONNECTED) return
         
         discoveryJob?.cancel()
-        _connectionState.value = ConnectionState.CONNECTING
+        _connectionState.value = ConnectionState.VALIDATING
         
         val url = "http://$host:$port/"
         
@@ -201,7 +226,8 @@ class ConnectionManager(private val context: Context) {
                 connection.requestMethod = "GET"
                 connection.connect()
                 
-                if (connection.responseCode == 200) {
+                val responseCode = connection.responseCode
+                if (responseCode == 200) {
                     withContext(Dispatchers.Main) {
                         _serverUrl.value = url
                         val retrofit = Retrofit.Builder()
@@ -216,11 +242,21 @@ class ConnectionManager(private val context: Context) {
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        Log.e("ConnectionManager", "Health check failed with code ${connection.responseCode}")
-                        _connectionState.value = ConnectionState.ERROR
+                        Log.e("ConnectionManager", "Health check failed with code $responseCode")
+                        _connectionState.value = ConnectionState.BACKEND_UNHEALTHY
                     }
                 }
                 connection.disconnect()
+            } catch (e: java.net.ConnectException) {
+                Log.e("ConnectionManager", "Backend unreachable (Connection Refused)", e)
+                withContext(Dispatchers.Main) {
+                    _connectionState.value = ConnectionState.BACKEND_UNREACHABLE
+                }
+            } catch (e: java.net.SocketTimeoutException) {
+                Log.e("ConnectionManager", "Backend unreachable (Timeout)", e)
+                withContext(Dispatchers.Main) {
+                    _connectionState.value = ConnectionState.BACKEND_UNREACHABLE
+                }
             } catch (e: Exception) {
                 Log.e("ConnectionManager", "Failed to connect to server", e)
                 withContext(Dispatchers.Main) {

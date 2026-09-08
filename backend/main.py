@@ -10,8 +10,7 @@ Initializes:
   - Static file serving (frontend)
   - CORS configuration
 
-Run with:
-  cd d:\\SIH\\voiceguard
+Run with (from project root directory):
   python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 """
 
@@ -138,15 +137,20 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing detection models (this may take a moment)...")
     try:
         _APP_STATE["detector"].initialize()
-        logger.info("✓ Detection models initialized.")
+        if _APP_STATE["detector"].is_initialized:
+            logger.info("✓ Detection models initialized successfully.")
+        else:
+            logger.warning("Detection models unavailable; heuristic fallback active.")
     except Exception as exc:
         logger.error(f"Model initialization error: {exc}")
-        logger.warning("Running in limited mode — detection pipeline may not be fully operational.")
+        logger.warning("Detection models unavailable; server running in limited mode.")
 
     # 6. Set up Zeroconf for local network discovery
     zeroconf_instance = None
+    zeroconf_status = "FAILED"
     try:
-        from zeroconf import ServiceInfo, Zeroconf
+        from zeroconf import ServiceInfo
+        from zeroconf.asyncio import AsyncZeroconf
         import socket
         
         # Determine active local IP
@@ -169,15 +173,55 @@ async def lifespan(app: FastAPI):
                 properties=desc,
                 server=f"voiceguard-{local_ip.replace('.', '-')}.local.",
             )
-            zeroconf_instance = Zeroconf()
-            zeroconf_instance.register_service(info)
+            zeroconf_instance = AsyncZeroconf()
+            await zeroconf_instance.async_register_service(info)
             logger.info(f"Zeroconf mDNS service registered on {local_ip}:{app_settings.server.port}")
+            zeroconf_status = "READY"
         else:
             logger.info("Zeroconf skipped: Server not bound to 0.0.0.0 or LAN IP unavailable.")
+            zeroconf_status = "SKIPPED"
     except ImportError:
         logger.warning("Zeroconf not installed. Automatic network discovery will be unavailable.")
+        zeroconf_status = "UNAVAILABLE"
     except Exception as exc:
-        logger.warning(f"Failed to start Zeroconf service: {exc}")
+        logger.exception(f"Failed to start Zeroconf service: {exc}")
+        zeroconf_status = "FAILED"
+
+    # Capability Report
+    pytorch_status = "UNAVAILABLE"
+    wav2vec2_status = "UNAVAILABLE"
+    ecapa_status = "UNAVAILABLE"
+    
+    try:
+        import torch
+        pytorch_status = "READY"
+    except ImportError:
+        pass
+        
+    try:
+        import speechbrain
+        ecapa_status = "READY"
+    except ImportError:
+        pass
+
+    try:
+        import transformers
+        wav2vec2_status = "READY"
+    except ImportError:
+        pass
+
+    detector_ready = "READY" if _APP_STATE["detector"].is_initialized else "UNAVAILABLE"
+
+    logger.info("=== CAPABILITY REPORT ===")
+    logger.info("  Server:      READY")
+    logger.info("  WebSocket:   READY")
+    logger.info(f"  PyTorch:     {pytorch_status}")
+    logger.info(f"  SpeechBrain: {ecapa_status}")
+    logger.info(f"  Wav2Vec2:    {wav2vec2_status}")
+    logger.info(f"  ECAPA:       {ecapa_status}")
+    logger.info(f"  Detector:    {detector_ready}")
+    logger.info(f"  Zeroconf:    {zeroconf_status}")
+    logger.info("=========================")
 
     logger.info("VoiceGuard is ready.")
     logger.info(f"  API:      http://{app_settings.server.host}:{app_settings.server.port}")
@@ -193,8 +237,8 @@ async def lifespan(app: FastAPI):
     
     if zeroconf_instance:
         try:
-            zeroconf_instance.unregister_all_services()
-            zeroconf_instance.close()
+            await zeroconf_instance.async_unregister_all_services()
+            await zeroconf_instance.async_close()
             logger.info("Zeroconf service unregistered.")
         except Exception as exc:
             logger.error(f"Error unregistering Zeroconf: {exc}")

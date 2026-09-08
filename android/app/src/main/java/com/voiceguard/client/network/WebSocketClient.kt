@@ -20,7 +20,13 @@ class WebSocketClient(
     val lastMessage: StateFlow<String?> = _lastMessage
     
     fun connect() {
-        val wsUrl = serverUrl.replace("http://", "ws://") + "ws/stream"
+        val cleanUrl = serverUrl.trimEnd('/')
+        val wsUrl = when {
+            cleanUrl.startsWith("https://") -> cleanUrl.replace("https://", "wss://") + "/ws/stream"
+            cleanUrl.startsWith("http://") -> cleanUrl.replace("http://", "ws://") + "/ws/stream"
+            cleanUrl.startsWith("wss://") || cleanUrl.startsWith("ws://") -> "$cleanUrl/ws/stream"
+            else -> "ws://$cleanUrl/ws/stream"
+        }
         val request = Request.Builder().url(wsUrl).build()
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {

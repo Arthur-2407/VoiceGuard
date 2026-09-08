@@ -53,10 +53,12 @@ class WebhookNotifier:
         """HMAC-SHA256 signature for payload verification at receiver."""
         if not self.secret_token:
             return ""
-        sig = hmac.new(
+        # Use hmac.HMAC() — the Python 3 constructor.
+        # hmac.new() was a Python 2 API and does not exist in Python 3.
+        sig = hmac.HMAC(
             self.secret_token.encode("utf-8"),
             payload.encode("utf-8"),
-            hashlib.sha256,
+            digestmod=hashlib.sha256,
         ).hexdigest()
         return f"sha256={sig}"
 

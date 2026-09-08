@@ -18,6 +18,7 @@ sealed class Screen(val route: String, val title: String, val icon: @Composable 
     object Dashboard : Screen("dashboard", "Home", { Icon(Icons.Default.Home, contentDescription = "Home") })
     object FileAnalysis : Screen("file_analysis", "Analysis", { Icon(Icons.Default.Search, contentDescription = "Analysis") })
     object LiveMonitor : Screen("live_monitor", "Monitor", { Icon(Icons.Default.PlayArrow, contentDescription = "Monitor") })
+    object CallMonitor : Screen("call_monitor", "Call", { Icon(Icons.Default.Call, contentDescription = "Call") })
     object Speakers : Screen("speakers", "Speakers", { Icon(Icons.Default.Person, contentDescription = "Speakers") })
     object Alerts : Screen("alerts", "Alerts", { Icon(Icons.Default.Warning, contentDescription = "Alerts") })
 }
@@ -25,6 +26,7 @@ sealed class Screen(val route: String, val title: String, val icon: @Composable 
 val BottomNavScreens = listOf(
     Screen.Dashboard,
     Screen.LiveMonitor,
+    Screen.CallMonitor,
     Screen.FileAnalysis,
     Screen.Alerts,
     Screen.Speakers
@@ -41,6 +43,7 @@ fun VoiceGuardNavHost(
         composable(Screen.Dashboard.route) { DashboardScreen(navController, viewModel) }
         composable(Screen.FileAnalysis.route) { FileAnalysisScreen(navController, viewModel) }
         composable(Screen.LiveMonitor.route) { LiveMonitorScreen(navController, viewModel) }
+        composable(Screen.CallMonitor.route) { CallMonitorScreen(navController, viewModel) }
         composable(Screen.Speakers.route) { SpeakerManagementScreen(navController, viewModel) }
         composable(Screen.Alerts.route) { AlertHistoryScreen(navController, viewModel) }
     }

@@ -2,16 +2,21 @@
 routes_analyze.py — REST endpoint for audio file analysis.
 
 POST /api/analyze
-  Accepts an uploaded audio file (WAV, MP3, FLAC, etc.)
+  Accepts an uploaded audio file (WAV, MP3, FLAC, video containers, etc.)
   Runs the full detection pipeline
   Returns risk score, alert level, and recommendation
 
-POST /api/analyze/url
-  Accepts a public audio URL for analysis
+Design:
+  - Upload is streamed to a temp file in bounded chunks rather than read entirely
+    into RAM. This prevents memory exhaustion from large files.
+  - The configured max_duration_sec is enforced after audio decode.
+  - All temporary files are cleaned up in finally blocks.
 """
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import logging
 import os
 import tempfile
@@ -24,6 +29,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Analysis"])
+
+# Streaming chunk size for upload-to-disk (64 KB per read)
+_UPLOAD_CHUNK_BYTES = 65536
 
 
 class AnalysisResponse(BaseModel):
@@ -60,11 +68,9 @@ async def analyze_audio_file(
     from backend.storage.speaker_registry import SpeakerRegistry
     import time
 
-    # Always fetch via getter so we get the live singleton (not a stale import reference)
+    # Always fetch via getter so we get the live singleton
     app_detector = get_app_detector()
 
-    # Lazy initialization: if the detector exists but wasn’t initialized yet,
-    # attempt to initialize now (handles reload / deferred startup scenarios).
     if app_detector is None:
         raise HTTPException(
             status_code=503,
@@ -83,54 +89,69 @@ async def analyze_audio_file(
                 detail="Detector initialization failed. Please check server logs and retry."
             )
 
-    # Read uploaded file to temp location
-    # Use .dat suffix — the actual format is determined by FFmpeg/soundfile probing, not extension
     session_id = str(uuid.uuid4())[:12]
-
     t_start = time.perf_counter()
 
+    tmp_path: Optional[str] = None
+
     try:
-        content = await file.read()
-
-        # File size guard (from config, default 200 MB)
+        # ── Stream upload to temp file (avoids reading entire file into RAM) ──────
         max_bytes = app_settings.upload.max_file_size_bytes
-        if len(content) > max_bytes:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Uploaded file is too large ({len(content) // (1024*1024)} MB). "
-                       f"Maximum allowed size is {max_bytes // (1024*1024)} MB."
-            )
 
-        with tempfile.NamedTemporaryFile(suffix=".dat", delete=False) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
+        fd, tmp_path = tempfile.mkstemp(suffix=".dat")
+        os.close(fd)
 
-        # Normalization: detect container, extract audio if video, convert to MP3
+        bytes_written = 0
+        with open(tmp_path, "wb") as out_f:
+            while True:
+                chunk_data = await file.read(_UPLOAD_CHUNK_BYTES)
+                if not chunk_data:
+                    break
+                bytes_written += len(chunk_data)
+                if bytes_written > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"Uploaded file exceeds the maximum allowed size of "
+                            f"{max_bytes // (1024 * 1024)} MB."
+                        ),
+                    )
+                out_f.write(chunk_data)
+
+        # ── Media normalization (audio/video → MP3) ───────────────────────────────
+        mp3_path: Optional[str] = None
         try:
             from backend.audio.preprocessor import normalize_to_mp3
             mp3_path = normalize_to_mp3(tmp_path)
             if mp3_path != tmp_path:
-                os.unlink(tmp_path)  # delete original temp file; mp3_path is the working file
-                tmp_path = mp3_path
-        except (ValueError, RuntimeError) as exc:
-            if os.path.exists(tmp_path):
+                # Delete original; mp3_path is now the working file
                 os.unlink(tmp_path)
+                tmp_path = mp3_path
+                mp3_path = None  # ownership transferred to tmp_path
+        except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         except Exception as exc:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
             raise HTTPException(status_code=422, detail=f"Audio format error: {exc}")
 
-
-
-        # Load and preprocess
+        # ── Load and preprocess ───────────────────────────────────────────────────
         try:
             audio, sr = load_audio(tmp_path, target_sr=app_settings.audio.sample_rate)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Could not decode audio file: {exc}")
-        finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)  # Privacy: delete temp file immediately
+
+        # ── Duration enforcement ──────────────────────────────────────────────────
+        max_dur = app_settings.upload.max_duration_sec
+        if max_dur > 0:
+            actual_duration = len(audio) / app_settings.audio.sample_rate
+            if actual_duration > max_dur:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Audio duration ({actual_duration:.1f}s) exceeds the maximum "
+                        f"allowed duration of {max_dur:.0f}s. "
+                        "Please upload a shorter file."
+                    ),
+                )
 
         audio = preprocess_audio(
             audio, sr=app_settings.audio.sample_rate,
@@ -147,7 +168,7 @@ async def analyze_audio_file(
         if not chunks:
             raise HTTPException(status_code=422, detail="No audio content found in file.")
 
-        # Set up per-request detection components
+        # ── Per-request detection components ──────────────────────────────────────
         risk_engine = build_risk_engine_from_settings(app_settings)
         consistency_checker = SpeakerConsistencyChecker(
             threshold=app_settings.speaker.consistency_threshold
@@ -156,6 +177,7 @@ async def analyze_audio_file(
             threshold_low=app_settings.risk.alert_thresholds.low,
             threshold_medium=app_settings.risk.alert_thresholds.medium,
             threshold_high=app_settings.risk.alert_thresholds.high,
+            threshold_critical=app_settings.risk.alert_thresholds.critical,
         )
 
         # Load speaker profile if specified
@@ -167,9 +189,15 @@ async def analyze_audio_file(
             if enrolled_emb is not None:
                 consistency_checker.set_enrolled_profile(enrolled_emb, speaker_id)
 
+        # ── Run detection pipeline (offloaded to thread pool) ─────────────────────
+        loop = asyncio.get_event_loop()
         chunk_scores = []
+
         for i, chunk in enumerate(chunks):
-            result = app_detector.process_chunk(chunk, chunk_id=i)
+            result = await loop.run_in_executor(
+                None,
+                functools.partial(app_detector.process_chunk, chunk, chunk_id=i)
+            )
             speaker_sim = None
             if result.speaker_embedding is not None:
                 c_result = consistency_checker.check(result.speaker_embedding)
@@ -218,3 +246,10 @@ async def analyze_audio_file(
     except Exception as exc:
         logger.exception(f"Analysis failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(exc)}")
+    finally:
+        # Privacy: always delete temp file, regardless of success or failure
+        if tmp_path is not None and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError as e:
+                logger.warning(f"Failed to delete analysis temp file {tmp_path}: {e}")

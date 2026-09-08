@@ -71,23 +71,31 @@ class VoiceCloneDetector:
         self._device = resolve_device(self.settings.detection.device)
         logger.info(f"Detector initializing on device: {self._device}")
 
-        # Load CNN-RNN detector model
-        self._model = load_model(
-            model_path=self.settings.detection.model_path,
-            n_mels=self.settings.detection.n_mels,
-            device_cfg=self.settings.detection.device,
-        )
+        try:
+            # Load CNN-RNN detector model
+            self._model = load_model(
+                model_path=self.settings.detection.model_path,
+                n_mels=self.settings.detection.n_mels,
+                device_cfg=self.settings.detection.device,
+            )
+            
+            if self._model is not None:
+                # Preload wav2vec2 if configured
+                if self.settings.detection.use_wav2vec2:
+                    preload_wav2vec2(self.settings.detection.wav2vec2_model)
 
-        # Preload wav2vec2 if configured
-        if self.settings.detection.use_wav2vec2:
-            preload_wav2vec2(self.settings.detection.wav2vec2_model)
+                # Preload ECAPA if configured
+                if self.settings.detection.use_speaker_embedding:
+                    preload_ecapa(self.settings.detection.ecapa_model)
 
-        # Preload ECAPA if configured
-        if self.settings.detection.use_speaker_embedding:
-            preload_ecapa(self.settings.detection.ecapa_model)
-
-        self._initialized = True
-        logger.info("VoiceCloneDetector initialized successfully.")
+                self._initialized = True
+                logger.info("VoiceCloneDetector initialized successfully.")
+            else:
+                self._initialized = False
+                logger.warning("VoiceCloneDetector could not initialize: Model is None.")
+        except Exception as e:
+            self._initialized = False
+            logger.warning(f"VoiceCloneDetector failed to initialize: {e}")
 
     def process_chunk(
         self,
@@ -161,8 +169,9 @@ class VoiceCloneDetector:
 
         Returns P(synthetic) as float in [0.0, 1.0].
         """
-        if not _TORCH_AVAILABLE or self._model is None:
+        if not _TORCH_AVAILABLE or self._model is None or not self._initialized:
             # Fallback: heuristic from acoustic features only
+            logger.warning("ML detector unavailable. Using acoustic heuristic fallback.")
             return self._heuristic_score(bundle)
 
         try:

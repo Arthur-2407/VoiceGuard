@@ -9,6 +9,8 @@ Default: 80 mel bands, 16kHz, hop=160, win=400.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import logging
 import numpy as np
 
@@ -93,7 +95,3 @@ def extract_log_mel_sequence(
         mean_pool=False,
     )
     return log_mel.T.astype(np.float32)  # [T, n_mels]
-
-
-# Type hint fix
-from typing import Optional

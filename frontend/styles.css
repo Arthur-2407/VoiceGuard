@@ -21,10 +21,12 @@
   --risk-low:     #f59e0b;
   --risk-medium:  #f97316;
   --risk-high:    #ef4444;
+  --risk-critical:#dc2626;
   --risk-safe-bg:   rgba(34, 197, 94, 0.1);
   --risk-low-bg:    rgba(245, 158, 11, 0.1);
   --risk-medium-bg: rgba(249, 115, 22, 0.1);
   --risk-high-bg:   rgba(239, 68, 68, 0.1);
+  --risk-critical-bg: rgba(220, 38, 38, 0.18);
 
   /* Text */
   --text-primary:   #f1f5f9;
@@ -358,10 +360,17 @@ body::after {
 .alert-icon-wrap.medium { background: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3); color: var(--risk-medium); }
 .alert-icon-wrap.high   { background: rgba(239,68,68,0.1);   border-color: rgba(239,68,68,0.4);  color: var(--risk-high);
   animation: alert-pulse 1.5s infinite; }
+.alert-icon-wrap.critical { background: rgba(220,38,38,0.15); border-color: rgba(220,38,38,0.6); color: var(--risk-critical);
+  animation: critical-pulse 1.0s infinite; }
 
 @keyframes alert-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
   50% { box-shadow: 0 0 0 12px rgba(239,68,68,0.15); }
+}
+
+@keyframes critical-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+  50% { box-shadow: 0 0 0 16px rgba(220,38,38,0.3); }
 }
 
 .alert-title {
@@ -692,10 +701,11 @@ body::after {
   text-align: center;
 }
 
-.level-SAFE   { background: var(--risk-safe-bg);   color: var(--risk-safe); }
-.level-LOW    { background: var(--risk-low-bg);    color: var(--risk-low); }
-.level-MEDIUM { background: var(--risk-medium-bg); color: var(--risk-medium); }
-.level-HIGH   { background: var(--risk-high-bg);   color: var(--risk-high); }
+.level-SAFE     { background: var(--risk-safe-bg);     color: var(--risk-safe); }
+.level-LOW      { background: var(--risk-low-bg);      color: var(--risk-low); }
+.level-MEDIUM   { background: var(--risk-medium-bg);   color: var(--risk-medium); }
+.level-HIGH     { background: var(--risk-high-bg);     color: var(--risk-high); }
+.level-CRITICAL { background: var(--risk-critical-bg); color: var(--risk-critical); font-weight: 700; }
 
 /* ── Enroll Grid ──────────────────────────────────────────────────────────── */
 .enroll-grid {

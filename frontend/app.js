@@ -16,7 +16,10 @@
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 const API_BASE = '';  // Same origin
-const WS_URL   = `ws://${location.host}/ws/stream`;
+// Derive WebSocket scheme from page protocol to support both HTTP and HTTPS deployments.
+// ws:// for HTTP, wss:// for HTTPS — prevents mixed-content errors under TLS.
+const WS_SCHEME = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${WS_SCHEME}//${location.host}/ws/stream`;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let ws = null;
@@ -40,13 +43,15 @@ const gaugeCanvas = document.getElementById('gaugeCanvas');
 const gaugeCtx = gaugeCanvas.getContext('2d');
 
 const RISK_COLORS = {
-  SAFE:   '#22c55e',
-  LOW:    '#f59e0b',
+  SAFE: '#22c55e',
+  LOW: '#f59e0b',
   MEDIUM: '#f97316',
-  HIGH:   '#ef4444',
+  HIGH: '#ef4444',
+  CRITICAL: '#dc2626',
 };
 
 function getRiskColor(score) {
+  if (score >= 0.95) return RISK_COLORS.CRITICAL;
   if (score >= 0.80) return RISK_COLORS.HIGH;
   if (score >= 0.60) return RISK_COLORS.MEDIUM;
   if (score >= 0.35) return RISK_COLORS.LOW;
@@ -54,6 +59,7 @@ function getRiskColor(score) {
 }
 
 function getRiskLevel(score) {
+  if (score >= 0.95) return 'CRITICAL';
   if (score >= 0.80) return 'HIGH';
   if (score >= 0.60) return 'MEDIUM';
   if (score >= 0.35) return 'LOW';
@@ -65,9 +71,9 @@ function drawGauge(score) {
   const h = gaugeCanvas.height;
   const cx = w / 2;
   const cy = h - 20;
-  const r  = 110;
+  const r = 110;
   const startAngle = Math.PI;
-  const endAngle   = 2 * Math.PI;
+  const endAngle = 2 * Math.PI;
   const sweepAngle = (endAngle - startAngle) * score;
 
   gaugeCtx.clearRect(0, 0, w, h);
@@ -85,7 +91,8 @@ function drawGauge(score) {
     { from: 0.00, to: 0.35, color: '#22c55e' },
     { from: 0.35, to: 0.60, color: '#f59e0b' },
     { from: 0.60, to: 0.80, color: '#f97316' },
-    { from: 0.80, to: 1.00, color: '#ef4444' },
+    { from: 0.80, to: 0.95, color: '#ef4444' },
+    { from: 0.95, to: 1.00, color: '#dc2626' },
   ];
 
   segments.forEach(seg => {
@@ -140,7 +147,7 @@ function drawGauge(score) {
   gaugeCtx.font = '10px Inter';
   gaugeCtx.textAlign = 'center';
   gaugeCtx.fillText('0', cx + (r + 16) * Math.cos(startAngle), cy + 4);
-  gaugeCtx.fillText('1', cx + (r + 16) * Math.cos(endAngle),   cy + 4);
+  gaugeCtx.fillText('1', cx + (r + 16) * Math.cos(endAngle), cy + 4);
   gaugeCtx.fillText('0.5', cx, cy - r - 10);
 
   // Update DOM
@@ -218,24 +225,25 @@ function clearTimeline() {
 // ── Alert Display ─────────────────────────────────────────────────────────────
 function updateAlertDisplay(level, recommendation) {
   const iconWrap = document.getElementById('alert-icon-wrap');
-  const title    = document.getElementById('alert-title');
-  const message  = document.getElementById('alert-message');
-  const actions  = document.getElementById('alert-actions');
+  const title = document.getElementById('alert-title');
+  const message = document.getElementById('alert-message');
+  const actions = document.getElementById('alert-actions');
 
   const levelClass = level.toLowerCase();
   iconWrap.className = `alert-icon-wrap ${levelClass}`;
 
   const icons = {
-    SAFE:   '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>',
-    LOW:    '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    SAFE: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>',
+    LOW: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
     MEDIUM: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-    HIGH:   '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>',
+    HIGH: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>',
+    CRITICAL: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
   };
 
   iconWrap.innerHTML = icons[level] || icons.SAFE;
 
   if (recommendation) {
-    title.textContent   = recommendation.title || level;
+    title.textContent = recommendation.title || level;
     message.textContent = recommendation.message || '';
 
     actions.innerHTML = '';
@@ -252,16 +260,16 @@ function updateAlertDisplay(level, recommendation) {
 
 // ── Stat Display ──────────────────────────────────────────────────────────────
 function updateStatDisplay(peak, mean, count, latency) {
-  document.getElementById('peak-risk').textContent   = (peak || 0).toFixed(3);
-  document.getElementById('mean-risk').textContent   = (mean || 0).toFixed(3);
-  document.getElementById('chunk-count').textContent  = count || 0;
-  document.getElementById('latency').textContent      = latency ? `${latency.toFixed(0)}ms` : '—';
+  document.getElementById('peak-risk').textContent = (peak || 0).toFixed(3);
+  document.getElementById('mean-risk').textContent = (mean || 0).toFixed(3);
+  document.getElementById('chunk-count').textContent = count || 0;
+  document.getElementById('latency').textContent = latency ? `${latency.toFixed(0)}ms` : '—';
 }
 
 // ── Speaker Consistency Display ───────────────────────────────────────────────
 function updateConsistencyDisplay(similarity) {
-  const bar    = document.getElementById('identity-bar');
-  const pct    = document.getElementById('identity-pct');
+  const bar = document.getElementById('identity-bar');
+  const pct = document.getElementById('identity-pct');
   const status = document.getElementById('identity-status');
 
   if (similarity === null || similarity === undefined) {
@@ -311,11 +319,11 @@ function handleWsMessage(data) {
 
   if (data.type !== 'risk_update') return;
 
-  const risk  = data.risk_score;
+  const risk = data.risk_score;
   const level = data.alert_level;
   const chunk = data.chunk_id;
-  const det   = data.detection_score;
-  const sim   = data.speaker_similarity;
+  const det = data.detection_score;
+  const sim = data.speaker_similarity;
 
   // Gauge
   drawGauge(risk);
@@ -323,7 +331,7 @@ function handleWsMessage(data) {
   // Stats
   chunkCount++;
   peakRisk = Math.max(peakRisk, risk);
-  riskSum  += risk;
+  riskSum += risk;
   updateStatDisplay(peakRisk, riskSum / chunkCount, chunkCount, null);
 
   // Timeline
@@ -337,22 +345,23 @@ function handleWsMessage(data) {
   // Speaker consistency
   updateConsistencyDisplay(sim);
 
-  // Update feature pill availability
-  document.getElementById('pill-wav2vec').classList.add('active');
-  document.getElementById('pill-speaker').classList.add('active');
+  // Feature pill availability is managed by checkSystemStatus() based on
+  // actual server-reported wav2vec2_available / ecapa_available flags.
+  // Do NOT activate pills unconditionally here — that would hide real status.
 
   // Log
   addLog(
     `Chunk #${chunk} | Risk: ${risk.toFixed(3)} | Level: ${level} | Det: ${det.toFixed(3)}`,
-    level === 'HIGH' ? 'error' : level === 'MEDIUM' ? 'warn' : 'info'
+    (level === 'CRITICAL' || level === 'HIGH') ? 'error' : level === 'MEDIUM' ? 'warn' : 'info'
   );
 
   // Toast on escalation
   if (level !== currentAlertLevel) {
-    if (['MEDIUM', 'HIGH'].includes(level)) {
+    if (['MEDIUM', 'HIGH', 'CRITICAL'].includes(level)) {
       showToast(
-        level === 'HIGH' ? '🚨 HIGH RISK — Voice cloning likely detected!' : '⚠️ MEDIUM RISK — Possible voice cloning',
-        level === 'HIGH' ? 'error' : 'warning',
+        level === 'CRITICAL' ? '🔴 CRITICAL — Confirmed Voice Cloning Attack!' :
+          level === 'HIGH' ? '🚨 HIGH RISK — Voice cloning likely detected!' : '⚠️ MEDIUM RISK — Possible voice cloning',
+        (level === 'CRITICAL' || level === 'HIGH') ? 'error' : 'warning',
         5000,
       );
     }
@@ -415,7 +424,10 @@ async function startLiveSession() {
     };
 
     audioSource.connect(audioProcessor);
-    audioProcessor.connect(audioContext.destination);
+    // NOTE: audioProcessor is intentionally NOT connected to audioContext.destination.
+    // Connecting it to the destination would feed microphone audio directly to the
+    // speakers, causing an echo / feedback loop. The processor only captures audio
+    // data via onaudioprocess and sends it over the WebSocket.
   };
 
   ws.onmessage = (e) => {
@@ -452,9 +464,9 @@ function stopLiveSession() {
 
   // Stop audio
   if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
-  if (audioSource)    { audioSource.disconnect(); audioSource = null; }
-  if (audioContext)   { audioContext.close(); audioContext = null; }
-  if (mediaStream)    { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+  if (audioSource) { audioSource.disconnect(); audioSource = null; }
+  if (audioContext) { audioContext.close(); audioContext = null; }
+  if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
 
   // Close WebSocket
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
@@ -471,9 +483,9 @@ function stopLiveSession() {
 
 // ── System Status ─────────────────────────────────────────────────────────────
 function updateSystemStatus(state) {
-  const statusEl   = document.getElementById('system-status');
-  const dot        = statusEl.querySelector('.status-dot');
-  const span       = statusEl.querySelector('span');
+  const statusEl = document.getElementById('system-status');
+  const dot = statusEl.querySelector('.status-dot');
+  const span = statusEl.querySelector('span');
   dot.className = `status-dot ${state}`;
   span.textContent = state === 'online' ? 'Connected' : state === 'error' ? 'Error' : 'Disconnected';
 }
@@ -491,7 +503,7 @@ function showTab(name) {
   document.getElementById(`tab-${name}`).classList.add('active');
 
   if (name === 'history') loadAlerts();
-  if (name === 'enroll')  loadSpeakers();
+  if (name === 'enroll') loadSpeakers();
   if (name === 'analyze') populateSpeakerSelect('analyze-speaker-id');
 }
 
@@ -515,7 +527,7 @@ function onFileSelect(e) {
 function handleFileSelected(file) {
   selectedAnalyzeFile = file;
   const sel = document.getElementById('file-selected');
-  sel.textContent = `Selected: ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  sel.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
   sel.classList.remove('hidden');
   document.getElementById('analyze-btn').disabled = false;
 }
@@ -537,7 +549,7 @@ async function analyzeFile() {
     const data = await resp.json();
     renderAnalysisResults(data);
     showToast(`Analysis complete: ${data.alert_level} (peak: ${data.peak_risk.toFixed(3)})`,
-      data.alert_level === 'HIGH' ? 'error' : data.alert_level === 'MEDIUM' ? 'warning' : 'success');
+      (data.alert_level === 'CRITICAL' || data.alert_level === 'HIGH') ? 'error' : data.alert_level === 'MEDIUM' ? 'warning' : 'success');
   } catch (err) {
     showToast('Analysis failed: ' + err.message, 'error');
   } finally {
@@ -624,12 +636,12 @@ async function enrollSpeaker() {
 
   const formData = new FormData();
   formData.append('name', name);
-  const org  = document.getElementById('enroll-org').value.trim();
+  const org = document.getElementById('enroll-org').value.trim();
   const role = document.getElementById('enroll-role').value.trim();
-  const sid  = document.getElementById('enroll-id').value.trim();
-  if (org)  formData.append('organization', org);
+  const sid = document.getElementById('enroll-id').value.trim();
+  if (org) formData.append('organization', org);
   if (role) formData.append('role', role);
-  if (sid)  formData.append('speaker_id', sid);
+  if (sid) formData.append('speaker_id', sid);
   enrollFiles.forEach(f => formData.append('files', f));
 
   const resultEl = document.getElementById('enroll-result');
@@ -647,9 +659,9 @@ async function enrollSpeaker() {
     enrollFiles = [];
     updateEnrollFileCount();
     document.getElementById('enroll-name').value = '';
-    document.getElementById('enroll-org').value  = '';
+    document.getElementById('enroll-org').value = '';
     document.getElementById('enroll-role').value = '';
-    document.getElementById('enroll-id').value   = '';
+    document.getElementById('enroll-id').value = '';
   } catch (err) {
     resultEl.className = 'enroll-result error';
     resultEl.textContent = 'Enrollment failed: ' + err.message;
@@ -670,19 +682,57 @@ async function loadSpeakers() {
       list.innerHTML = '<div class="speakers-empty">No speakers enrolled yet.</div>';
       return;
     }
-    list.innerHTML = speakers.map(s => `
-      <div class="speaker-item" id="sp-${s.speaker_id}">
-        <div class="speaker-avatar">${(s.name || '?').charAt(0).toUpperCase()}</div>
-        <div class="speaker-info">
-          <div class="speaker-name">${s.name || '—'}</div>
-          <div class="speaker-meta">${s.organization || ''} ${s.role ? '· ' + s.role : ''} · ${s.num_samples} samples</div>
-          <div class="speaker-id-badge">${s.speaker_id}</div>
-        </div>
-        <button class="delete-btn" onclick="deleteSpeaker('${s.speaker_id}')" title="Delete speaker">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-        </button>
-      </div>
-    `).join('');
+
+    // Build speaker items using DOM API (not innerHTML) to prevent XSS.
+    // All user-supplied values (name, organization, role, speaker_id) are
+    // assigned via textContent, which treats them as plain text only.
+    list.innerHTML = '';
+    speakers.forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'speaker-item';
+      item.id = `sp-${s.speaker_id}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = 'speaker-avatar';
+      avatar.textContent = (s.name || '?').charAt(0).toUpperCase();
+
+      const info = document.createElement('div');
+      info.className = 'speaker-info';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'speaker-name';
+      nameEl.textContent = s.name || '—';
+
+      const meta = document.createElement('div');
+      meta.className = 'speaker-meta';
+      const parts = [];
+      if (s.organization) parts.push(s.organization);
+      if (s.role) parts.push(s.role);
+      parts.push(`${s.num_samples} samples`);
+      meta.textContent = parts.join(' · ');
+
+      const badge = document.createElement('div');
+      badge.className = 'speaker-id-badge';
+      badge.textContent = s.speaker_id;
+
+      info.appendChild(nameEl);
+      info.appendChild(meta);
+      info.appendChild(badge);
+
+      // Delete button — uses closure (not inline onclick string) to safely
+      // pass the speaker_id without embedding it in HTML attribute context.
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.title = 'Delete speaker';
+      // Static SVG markup is trusted (not user data):
+      deleteBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>';
+      deleteBtn.addEventListener('click', () => deleteSpeaker(s.speaker_id));
+
+      item.appendChild(avatar);
+      item.appendChild(info);
+      item.appendChild(deleteBtn);
+      list.appendChild(item);
+    });
   } catch (err) {
     list.innerHTML = '<div class="speakers-empty">Error loading speakers.</div>';
   }
@@ -711,7 +761,7 @@ async function populateSpeakerSelect(selectId) {
     sel.innerHTML = '<option value="">None</option>' +
       speakers.map(s => `<option value="${s.speaker_id}">${s.name} (${s.speaker_id})</option>`).join('');
     if (current) sel.value = current;
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function refreshSpeakers() { populateSpeakerSelect('live-speaker-id'); }
@@ -758,10 +808,10 @@ async function loadAlerts() {
 
 // ── Threshold Management ──────────────────────────────────────────────────────
 async function updateThresholds() {
-  const low    = parseFloat(document.getElementById('thr-low').value);
+  const low = parseFloat(document.getElementById('thr-low').value);
   const medium = parseFloat(document.getElementById('thr-medium').value);
-  const high   = parseFloat(document.getElementById('thr-high').value);
-  const resEl  = document.getElementById('threshold-result');
+  const high = parseFloat(document.getElementById('thr-high').value);
+  const resEl = document.getElementById('threshold-result');
 
   if (!(low < medium && medium < high)) {
     resEl.className = 'threshold-result error';
@@ -796,9 +846,9 @@ function showToast(message, type = 'info', duration = 4000) {
 
   const icons = {
     success: '✅',
-    error:   '🚨',
+    error: '🚨',
     warning: '⚠️',
-    info:    'ℹ️',
+    info: 'ℹ️',
   };
 
   toast.innerHTML = `
@@ -823,13 +873,13 @@ async function checkSystemStatus() {
 
         // Update feature pill status
         if (data.wav2vec2_available) document.getElementById('pill-wav2vec').classList.add('active');
-        if (data.ecapa_available)    document.getElementById('pill-speaker').classList.add('active');
+        if (data.ecapa_available) document.getElementById('pill-speaker').classList.add('active');
 
         // Load current thresholds
         if (data.config && data.config.thresholds) {
-          document.getElementById('thr-low').value    = data.config.thresholds.low;
+          document.getElementById('thr-low').value = data.config.thresholds.low;
           document.getElementById('thr-medium').value = data.config.thresholds.medium;
-          document.getElementById('thr-high').value   = data.config.thresholds.high;
+          document.getElementById('thr-high').value = data.config.thresholds.high;
         }
       }
     }

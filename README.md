@@ -1,134 +1,206 @@
-# VoiceGuard — AI-Powered Real-Time Voice Cloning Detection System
+# VoiceGuard 
+**Real-Time Voice Authenticity & Deepfake Risk Intelligence**
 
 > **SIH 2026 | AICTE Cyber Security Cell**
-> Smart India Hackathon Submission
 
-## 🎯 Overview
-
-VoiceGuard is a real-time AI detection system that identifies voice cloning impersonation attacks in live audio streams. It protects banking, telecom, and enterprise communication systems from social engineering attacks using synthesized/cloned voices.
-
-### Key Capabilities
-- **Real-time stream analysis** via WebSocket (< 2s per chunk)
-- **Hybrid CNN-BiLSTM detector** with self-attention and wav2vec2 backbone
-- **Dynamic risk scoring** with rolling window aggregation
-- **Speaker identity verification** via ECAPA-TDNN embeddings
-- **Privacy-preserving audit log** — no raw audio stored
-- **Enterprise webhook integration** with HMAC-SHA256 signing
-- **Responsive web dashboard** with live gauge and risk timeline
+VoiceGuard is an advanced, localized threat-intelligence platform designed to detect synthetic speech, cloned voices, and social engineering fraud in real-time. By bridging a lightweight Android edge client with a robust Python/FastAPI localhost backend, VoiceGuard evaluates the authenticity of incoming audio streams before critical trust is breached.
 
 ---
 
-## 🏗️ Architecture
+## ◈ SYSTEM OVERVIEW
 
-```
-Audio Stream
-    │
-    ▼
-[Preprocessor] → VAD, Resample (16kHz), Normalize, Chunk (2s)
-    │
-    ▼
-[Feature Extractor]
-    ├── MFCC (40 coeffs + Δ + ΔΔ) = 120-dim
-    ├── Log-Mel Spectrogram (80 bands) = 80-dim
-    ├── Prosodic (F0, Jitter, Shimmer, HNR, ZCR, Energy) = 7-dim
-    ├── Wav2Vec2-base contextual embedding = 768-dim
-    └── ECAPA-TDNN speaker embedding = 192-dim
-                        → Fused: 1167-dim
-    │
-    ▼
-[CNN-BiLSTM Detector]
-    ├── CNN Encoder (3 Conv1D blocks + residual)
-    ├── BiLSTM (2 layers, 256 hidden)
-    ├── Self-Attention
-    └── Classifier head → P(synthetic) ∈ [0,1]
-    │
-    ▼
-[Risk Engine]
-    ├── Rolling weighted window (last N chunks)
-    ├── Speaker consistency penalty (cosine similarity)
-    └── Combined risk score → Alert Level
-    │
-    ▼
-[Alert System]
-    ├── WebSocket push to frontend
-    ├── Webhook POST to enterprise systems
-    └── SQLite audit log (features only, no audio)
-```
+As voice synthesis (TTS) and Retrieval-based Voice Conversion (RVC) technologies become increasingly accessible, traditional caller verification methods are obsolete. VoiceGuard provides a layered signal-processing and machine-learning defense system to instantly calculate the synthetic probability of an active speaker.
+
+### Core Value Proposition
+- **Real-Time Analysis**: Stream audio from an Android device to a local PC backend via WebSocket for immediate risk scoring.
+- **Privacy First**: Audio is analyzed locally on your hardware. **Raw audio is never stored.**
+- **Edge-to-Localhost Architecture**: The Android client operates purely as a capture and UI transport layer, offloading intensive ML feature extraction to the backend PC.
 
 ---
 
-## 📱 Android Client & Local Network Architecture
+## ◈ FEATURE INTELLIGENCE MATRIX
 
-VoiceGuard provides a lightweight, futuristic Android application that connects directly to the PC backend via a local wireless network.
-
-### Architecture
-```
-[Android Device] ↔ [Wi-Fi / Mobile Hotspot] ↔ [VoiceGuard PC Server]
-```
-
-### Capabilities
-- **Zero Heavy Processing**: The Android client acts purely as a UI layer. No ML models are loaded on the phone.
-- **Local Network Discovery**: The app automatically discovers the FastAPI server on your local network (e.g., `192.168.x.x:8000`) using built-in network scanning.
-- **Live Monitor**: Uses a WebSocket connection to stream 16kHz PCM audio directly from the Android microphone to the PC for instant deepfake risk scoring.
-- **File Analysis**: Uploads audio files via REST API using standard multi-part file chunking for granular verification.
+| Capability | Status | Description |
+|---|---|---|
+| **Live Monitor** | Implemented | Real-time microphone capture and analysis via WebSocket stream. |
+| **Call Monitor** | Implemented / Limited | Detects active call states and streams audio using a mixed acoustic fallback. |
+| **File Analysis** | Implemented | Offline media uploading and forensic feature analysis. |
+| **Speaker Enrollment** | Implemented | Registers reference speaker embeddings for consistency checking. |
+| **Risk Engine** | Implemented | Temporal window aggregation with speaker consistency penalties. |
+| **Security Alerts** | Implemented | High-risk WebSocket alerts and UI safety notifications. |
+| **mDNS Discovery** | Implemented | Automatic ZeroConf discovery of the PC backend by Android. |
+| **Neural Detector** | **Fallback** | *See 'Current Model Status' below.* The production checkpoint is unavailable; defaults to a validated heuristic fallback. |
 
 ---
 
-## 🚀 Quick Start
+## ◈ ARCHITECTURE & PIPELINE
+
+### High-Level Data Flow
+
+```mermaid
+flowchart LR
+    A[Android Edge Client] -->|16kHz PCM WebSocket| B[FastAPI Backend]
+    B --> C[VAD / Silence Stripping]
+    C --> D[Feature Extraction]
+    D --> E[Risk Engine]
+    E -->|Risk & Alert WebSocket| A
+    E --> F[SQLite Audit Log]
+```
+
+### Signal & Detection Pipeline
+
+1. **Input & Preprocessing**: 16kHz PCM audio arrives via WebSocket. WebRTC Voice Activity Detection (VAD) drops silent frames.
+2. **Feature Extraction**:
+    - **MFCCs**: 40 coefficients + deltas (120-dim)
+    - **Log-Mel Spectrogram**: 80 bands
+    - **Prosodic Features**: Fundamental frequency (F0), Jitter, Shimmer, HNR.
+    - **Speaker Embedding**: ECAPA-TDNN (192-dim)
+3. **Detection Assessment**: Fused features pass to the detection engine.
+4. **Risk Engine**: Applies temporal smoothing over the last *N* chunks and applies cosine-similarity penalties if an enrolled speaker profile exists.
+5. **Alert Manager**: Emits `SAFE`, `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL` alerts based on configurable thresholds.
+
+---
+
+## ◈ CURRENT MODEL STATUS
+
+> [!WARNING]
+> **Neural Detector Checkpoint: NOT INCLUDED**
+> The fully trained proprietary CNN-BiLSTM deepfake detector checkpoint (`backend/models/weights/detector.pt`) is **not bundled** in this repository. 
+> 
+> **Current Behavior:** The system gracefully detects the missing checkpoint and activates a **Heuristic Fallback** mode. This allows the complete pipeline (WebSocket streaming, UI state transitions, and alert logic) to function and be evaluated without the actual neural weights.
+
+---
+
+## ◈ ANDROID EDGE COMPANION
+
+The Android client provides a modern, "Digital Trust" interface for the platform:
+- **Dashboard**: Real-time network connection status and system health.
+- **Live Monitor**: Immediate microphone analysis.
+- **Call Monitor**: Integrates with Android Telecom to detect `RINGING` and `ACTIVE` states. 
+- **Speaker Management**: UI for enrolling trusted speaker profiles.
+
+### Call Monitor Honesty & Limitations
+VoiceGuard strictly separates *Call State Detection* from *Call Audio Capture*. 
+Due to Android OS security policies (Android 10+), applications cannot directly intercept raw cellular downlink audio. Therefore, the Call Monitor utilizes a **Mixed Acoustic Fallback** (via Earpiece/Speakerphone). It captures ambient audio combining local speech and remote speech bleeding from the device speaker. It does **not** directly intercept the cellular radio stream.
+
+---
+
+## ◈ TECHNOLOGY STACK
+
+**Backend & ML Processing**
+- Python 3.10+, FastAPI, Uvicorn
+- PyTorch, SpeechBrain, Transformers (Wav2Vec2)
+- Librosa, WebRTCVAD, NumPy
+- SQLite (Metadata and Audit Logs)
+
+**Android Client**
+- Kotlin, Jetpack Compose
+- Kotlin Coroutines & StateFlow
+- OkHttp (WebSocket & REST)
+- Android Telecom Manager & Foreground Services
+
+---
+
+## ◈ INSTALLATION & QUICK START
 
 ### 1. Prerequisites
+- Windows OS (Tested environment)
 - Python 3.10+
-- pip
-- Internet connection (first run, for model downloads)
+- FFmpeg installed and accessible in system PATH.
 
-### 2. Install Dependencies
+### 2. Virtual Environment Setup
+*We strictly recommend using an isolated virtual environment to prevent system package bleeding.*
 ```powershell
-cd d:\SIH\voiceguard
+cd D:\SIH\voiceguard
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+### 3. Install Dependencies
+```powershell
 pip install -r backend\requirements.txt
 ```
 
-### 3. Download Models
+### 4. Run the Backend Server
+Always use the virtual environment Python executable:
 ```powershell
-python scripts\download_models.py
+.\venv\Scripts\python.exe -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+Alternatively, use the provided wrapper scripts: `.\start_server.ps1` or `start_server.bat`.
 
-### 4. Run Tests
-```powershell
-python scripts\test_pipeline.py
-```
-
-### 5. Start the Server
-```powershell
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### 6. Open the Dashboard
-Navigate to `http://localhost:8000` in your browser.
+### 5. Access Interfaces
+- **Web Dashboard**: `http://localhost:8000`
+- **Android App**: Ensure your phone is on the same Wi-Fi network. The app will use mDNS to auto-discover the server.
 
 ---
 
-## 📡 API Endpoints
+## ◈ PLATFORM ENGINEERING (API & WEBSOCKET)
 
-| Method | Endpoint | Description |
+### REST Endpoints
+| Method | Endpoint | Purpose |
 |--------|----------|-------------|
-| `GET`    | `/`                    | Frontend dashboard |
-| `WS`     | `/ws/stream`           | Real-time audio stream analysis |
-| `POST`   | `/api/analyze`         | Upload file for analysis |
-| `POST`   | `/api/speakers/enroll` | Enroll a speaker profile |
-| `GET`    | `/api/speakers`        | List enrolled speakers |
-| `DELETE` | `/api/speakers/{id}`   | Delete speaker profile |
-| `GET`    | `/api/alerts/recent`   | Recent alert history |
-| `GET`    | `/api/config/status`   | System health status |
-| `PUT`    | `/api/config/thresholds` | Update alert thresholds |
-| `GET`    | `/docs`                | Interactive API documentation |
+| `GET`  | `/api/config/status` | Retrieves system health, Zeroconf status, and detector availability. |
+| `POST` | `/api/analyze` | Accepts `multipart/form-data` audio file for offline forensic analysis. |
+| `POST` | `/api/speakers/enroll` | Uploads reference audio to extract and save an ECAPA-TDNN profile. |
+| `GET`  | `/api/alerts/recent` | Retrieves recent historical alerts from SQLite. |
+
+### WebSocket Protocol (`/ws/stream`)
+**Client (Android) Sends:**
+- Binary frames: 16kHz PCM `ByteArray`
+- Control JSON: `{"type": "start_call_monitor", "capture_mode": "MIXED_ACOUSTIC"}`
+
+**Server (FastAPI) Responses:**
+- `{"type": "session_start", "session_id": "...", "detector_ready": false}`
+- `{"type": "status_update", "status": "WAITING_FOR_DATA"}` *(Sent when VAD drops silent frames)*
+- `{"type": "risk_update", "risk_score": 0.45, "alert_level": "LOW"}`
 
 ---
 
-## 🔧 Configuration
+## ◈ TROUBLESHOOTING
 
-All parameters are in `config.yaml` — no hardcoded values.
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| `ModuleNotFoundError` on startup | Global Python executed instead of venv. | Ensure you run `.\venv\Scripts\python.exe`. |
+| Android shows `Backend: DISCONNECTED` | Different networks or Firewall blocking port 8000. | Ensure phone and PC are on the same Wi-Fi. Allow python.exe through Windows Firewall. |
+| Android stuck in `INITIALIZING` | Missing audio permissions or hardware block. | Grant microphone permissions. Ensure no other app is monopolizing the mic. |
+| `Detector: UNAVAILABLE` | Missing `detector.pt`. | This is expected behavior without the proprietary weights. The system will use the fallback. |
 
-Key settings:
+---
+
+## ◈ CURRENT LIMITATIONS
+
+Transparency is critical for a security platform. Current limitations include:
+1. **Missing Neural Checkpoint**: As documented, the production `detector.pt` model is not bundled.
+2. **Android Call Audio Constraints**: Call Monitor relies on acoustic bleed (speakerphone/earpiece fallback) rather than direct cellular radio interception.
+3. **No Authentication**: The API and WebSocket currently lack JWT/token authentication. It assumes a trusted local network environment.
+4. **Hardware Bound Latency**: Inference time heavily depends on the host PC's CPU/GPU capabilities.
+
+---
+
+## ◈ FUTURE VECTOR (ROADMAP)
+
+- **Phase 1**: Stabilize real-time WebSocket ingestion and heuristic baselines *(Current)*
+- **Phase 2**: Train and deploy a lightweight, quantized neural detector suitable for CPU environments.
+- **Phase 3**: Enterprise integration with HMAC-signed webhooks for centralized fraud dashboards.
+- **Phase 4**: Migration to ONNX Runtime for multi-platform optimization.
+- **Phase 5**: Federated learning investigations to improve speaker embeddings without compromising local data.
+
+---
+
+## ◈ TESTING & VALIDATION
+
+Run the automated test suite to verify the media pipeline and processing layers:
+```powershell
+.\venv\Scripts\python.exe -m pytest tests/
+```
+
+---
+
+## ◈ CONFIGURATION
+
+All parameters are centrally managed in `config.yaml` — no hardcoded thresholds.
+
+Key settings example:
 ```yaml
 audio:
   sample_rate: 16000
@@ -144,15 +216,11 @@ risk:
     low: 0.35
     medium: 0.60
     high: 0.80
-
-privacy:
-  retain_audio: false      # Raw audio NEVER stored
-  log_features_only: true
 ```
 
 ---
 
-## 🧬 Model Details
+## ◈ MODEL DETAILS
 
 | Component | Architecture | Dimension |
 |-----------|-------------|-----------|
@@ -168,16 +236,7 @@ privacy:
 
 ---
 
-## 🔒 Privacy & Compliance
-
-- Raw audio is **never** stored to disk
-- Only feature vectors, risk scores, and prosodic statistics are logged
-- GDPR/PDPB-compliant speaker profile deletion
-- Webhook payloads are HMAC-SHA256 signed
-
----
-
-## 📄 References
+## ◈ REFERENCES
 
 1. **Generalized End-to-End Loss for Speaker Verification** (Wan et al., NeurIPS 2018) — `1802.06006v3.pdf`
 2. **Survey: Text-to-Speech and Voice Cloning** (2025) — `2505.00579v1.pdf`
@@ -186,6 +245,13 @@ privacy:
 
 ---
 
-## 👥 Team
+## ◈ PRIVACY ARCHITECTURE
 
-SIH 2026 Submission — Built with ❤️ for India's Cyber Security
+VoiceGuard adheres to a strict privacy-first execution model:
+- **Zero Raw Audio Storage**: Processed PCM arrays are dropped from memory immediately after feature extraction.
+- **Feature-Only Persistence**: The SQLite database only logs anonymized risk metrics and alert metadata.
+- **Local Enclaves**: All analysis executes entirely on the local PC. No audio leaves your local Wi-Fi perimeter.
+
+---
+
+**SIH 2026 Submission — Built with ❤️ for India's Cyber Security**

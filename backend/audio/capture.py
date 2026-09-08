@@ -196,7 +196,8 @@ class StreamCapture:
     ):
         self.sample_rate = sample_rate
         self.chunk_samples = int(sample_rate * chunk_sec)
-        self.hop_samples = int(self.chunk_samples * (1 - overlap_ratio))
+        safe_overlap = max(0.0, min(overlap_ratio, 0.99))
+        self.hop_samples = max(1, int(self.chunk_samples * (1.0 - safe_overlap)))
         self.src_dtype = src_dtype
         self.channels = channels
         self._buffer = np.array([], dtype=np.float32)

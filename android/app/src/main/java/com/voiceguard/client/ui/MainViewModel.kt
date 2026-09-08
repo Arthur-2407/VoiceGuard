@@ -2,19 +2,19 @@ package com.voiceguard.client.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import com.voiceguard.client.network.ConnectionManager
+import com.voiceguard.client.model.CallMonitorRepository
 import com.voiceguard.client.network.ConnectionState
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     
-    val connectionManager = ConnectionManager(application)
+    private val repository = CallMonitorRepository.getInstance(application)
+    val connectionManager = repository.connectionManager
     
     val connectionState: StateFlow<ConnectionState> = connectionManager.connectionState
     val serverUrl: StateFlow<String?> = connectionManager.serverUrl
+    
+    val telemetry = repository.telemetry
     
     init {
         // Start automatic discovery on init
@@ -32,6 +32,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     override fun onCleared() {
         super.onCleared()
-        connectionManager.cleanup()
+        // Do not cleanup app-wide ConnectionManager here
     }
 }

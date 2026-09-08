@@ -10,6 +10,10 @@ The fused feature vector is composed of:
 
 Total: 1167-dim when all extractors available, always same shape.
 
+The fused vector always has the same dimensionality regardless of which optional
+features are available. Use FeatureBundle.speaker_emb_available and
+wav2vec2_emb_available flags to know which slots contain real data vs zeros.
+
 Also provides the sequence representation for CNN-RNN input:
   Shape: [T, n_mels] log-mel sequences + mfcc sequences
 """
@@ -17,7 +21,7 @@ Also provides the sequence representation for CNN-RNN input:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -36,19 +40,23 @@ class FeatureBundle:
     """
     Container for all features extracted from a single audio chunk.
 
-    fused_vector:       flat concatenated feature vector for non-sequence models
-    mfcc_seq:           [T, 120] MFCC sequence for RNN input
-    mel_seq:            [T, 80] log-Mel sequence for CNN input
-    wav2vec2_emb:       [768] or [T', 768] Wav2Vec2 embedding
-    speaker_emb:        [192] ECAPA speaker embedding
-    prosodic:           [7] prosodic feature vector
+    fused_vector:           flat concatenated feature vector for non-sequence models
+    mfcc_seq:               [T, 120] MFCC sequence for RNN input
+    mel_seq:                [T, 80] log-Mel sequence for CNN input
+    wav2vec2_emb:           [768] or [T', 768] Wav2Vec2 embedding
+    speaker_emb:            [192] ECAPA speaker embedding, or None if unavailable
+    prosodic:               [7] prosodic feature vector
+    speaker_emb_available:  True if speaker_emb contains a real embedding (not placeholder zeros)
+    wav2vec2_emb_available: True if wav2vec2_emb contains a real embedding (not placeholder zeros)
     """
     fused_vector: np.ndarray
     mfcc_seq: np.ndarray
     mel_seq: np.ndarray
     wav2vec2_emb: np.ndarray
-    speaker_emb: np.ndarray
+    speaker_emb: Optional[np.ndarray]   # None when ECAPA unavailable
     prosodic: np.ndarray
+    speaker_emb_available: bool = False
+    wav2vec2_emb_available: bool = False
 
 
 def extract_all_features(
@@ -81,7 +89,9 @@ def extract_all_features(
         device:                 torch device; None = auto
 
     Returns:
-        FeatureBundle with all extracted features
+        FeatureBundle with all extracted features.
+        Check .speaker_emb_available and .wav2vec2_emb_available to know
+        which slots carry real data vs zero placeholders.
     """
     # 1. MFCC (mean-pooled) → [3*n_mfcc]
     mfcc_vec = extract_mfcc(
@@ -113,29 +123,43 @@ def extract_all_features(
     prosodic = extract_prosodic_features(audio, sr=sr, hop_length=hop_length)
 
     # 6. Wav2Vec2 (mean-pooled) → [768]
+    wav2vec2_emb_available = False
     if use_wav2vec2:
         wav2vec2_emb = extract_wav2vec2(
             audio, sr=sr, model_name=wav2vec2_model_name,
             device=device, mean_pool=True,
         )
+        # extract_wav2vec2 returns zeros on failure; check norm to detect real vs placeholder
+        if np.linalg.norm(wav2vec2_emb) > 1e-8:
+            wav2vec2_emb_available = True
     else:
         wav2vec2_emb = np.zeros(768, dtype=np.float32)
 
-    # 7. ECAPA speaker embedding → [192]
+    # 7. ECAPA speaker embedding → [192] or None
+    speaker_emb_available = False
+    speaker_emb_result: Optional[np.ndarray] = None
+    speaker_emb_for_fused = np.zeros(192, dtype=np.float32)
+
     if use_speaker_embedding:
-        speaker_emb = extract_speaker_embedding(
+        speaker_emb_result = extract_speaker_embedding(
             audio, sr=sr, model_name=ecapa_model_name,
         )
-    else:
-        speaker_emb = np.zeros(192, dtype=np.float32)
+        if speaker_emb_result is not None:
+            # Real embedding returned
+            speaker_emb_available = True
+            speaker_emb_for_fused = speaker_emb_result.astype(np.float32)
+        else:
+            # ECAPA unavailable or failed — use zeros in fused vector only,
+            # keep speaker_emb_result=None so consistency checker can detect the gap
+            logger.debug("Speaker embedding unavailable — zeros used in fused vector slot.")
 
-    # 8. Fuse into single vector
+    # 8. Fuse into single vector (always 1167-dim regardless of availability)
     fused_vector = np.concatenate([
-        mfcc_vec,        # [120]
-        mel_vec,         # [80]
-        prosodic,        # [7]
-        wav2vec2_emb,    # [768]
-        speaker_emb,     # [192]
+        mfcc_vec,              # [120]
+        mel_vec,               # [80]
+        prosodic,              # [7]
+        wav2vec2_emb,          # [768]  (real or zeros)
+        speaker_emb_for_fused, # [192]  (real or zeros)
     ]).astype(np.float32)  # [1167]
 
     return FeatureBundle(
@@ -143,8 +167,10 @@ def extract_all_features(
         mfcc_seq=mfcc_seq,
         mel_seq=mel_seq,
         wav2vec2_emb=wav2vec2_emb,
-        speaker_emb=speaker_emb,
+        speaker_emb=speaker_emb_result,   # None when ECAPA failed
         prosodic=prosodic,
+        speaker_emb_available=speaker_emb_available,
+        wav2vec2_emb_available=wav2vec2_emb_available,
     )
 
 

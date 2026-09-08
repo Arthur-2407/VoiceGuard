@@ -14,17 +14,19 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun VoiceGuardCard(
     modifier: Modifier = Modifier,
+    containerColor: Color = ElevatedSurface,
+    borderColor: Color = DividerColor,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(12.dp)
-    val border = BorderStroke(1.dp, DividerColor)
+    val border = BorderStroke(1.dp, borderColor)
     
     if (onClick != null) {
         Surface(
             modifier = modifier,
             shape = shape,
-            color = ElevatedSurface,
+            color = containerColor,
             border = border,
             onClick = onClick
         ) {
@@ -36,7 +38,7 @@ fun VoiceGuardCard(
         Surface(
             modifier = modifier,
             shape = shape,
-            color = ElevatedSurface,
+            color = containerColor,
             border = border
         ) {
             Column(modifier = Modifier.padding(16.dp)) {

@@ -79,6 +79,9 @@ if __name__ == "__main__":
     for name, ok in results.items():
         logger.info(f"  {name:20s} {'✓ OK' if ok else '✗ FAILED'}")
 
+    # Use dynamic path so the script works from any installation location
+    _project_root = Path(__file__).resolve().parent.parent
+
     if not all(results.values()):
         logger.warning(
             "\nSome downloads failed. The system will still run with graceful fallbacks.\n"
@@ -86,5 +89,6 @@ if __name__ == "__main__":
         )
     else:
         logger.info("\nAll models ready. Run the server with:")
-        logger.info("  cd d:\\SIH\\voiceguard")
-        logger.info("  python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000")
+        logger.info(f"  cd {_project_root}")
+        logger.info(f"  python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000")
+

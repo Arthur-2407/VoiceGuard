@@ -34,6 +34,10 @@ except ImportError:
 import datetime
 import numpy as np
 
+def _utcnow() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
 if _SQLALCHEMY_AVAILABLE:
 
     class Base(DeclarativeBase):
@@ -52,8 +56,8 @@ if _SQLALCHEMY_AVAILABLE:
         embedding_json = Column(Text, nullable=False)
         embedding_dim = Column(Integer, default=192)
         num_samples = Column(Integer, default=1)
-        created_at = Column(DateTime, default=datetime.datetime.utcnow)
-        updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+        created_at = Column(DateTime, default=_utcnow)
+        updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
         def get_embedding(self) -> np.ndarray:
             return np.array(json.loads(self.embedding_json), dtype=np.float32)
@@ -84,7 +88,7 @@ if _SQLALCHEMY_AVAILABLE:
 
         id = Column(Integer, primary_key=True, autoincrement=True)
         session_id = Column(String(64), unique=True, nullable=False, index=True)
-        started_at = Column(DateTime, default=datetime.datetime.utcnow)
+        started_at = Column(DateTime, default=_utcnow)
         ended_at = Column(DateTime, nullable=True)
         total_chunks = Column(Integer, default=0)
         peak_risk = Column(Float, default=0.0)

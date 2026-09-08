@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -87,7 +88,25 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(32.dp))
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("LIVE MONITOR", style = MaterialTheme.typography.labelSmall, color = TextPrimary)
-                Text("Real-time telemetry", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(top = 4.dp))
+                Text("Room telemetry", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            VoiceGuardCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { navController.navigate(Screen.CallMonitor.route) }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Call, contentDescription = null, tint = StatusOnline, modifier = Modifier.size(32.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("CALL SECURITY", style = MaterialTheme.typography.labelSmall, color = TextPrimary)
+                        Text("Remote caller deepfake monitoring", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
             }
         }
         

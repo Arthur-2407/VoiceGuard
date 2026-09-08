@@ -84,6 +84,9 @@ def normalize(audio: np.ndarray, method: str = "peak") -> np.ndarray:
     method='peak'  → scale so max(|audio|) == 1.0
     method='rms'   → scale to RMS of -20 dBFS
     """
+    if audio is None or audio.size == 0:
+        return audio
+
     if method == "peak":
         peak = np.max(np.abs(audio))
         if peak > 1e-8:
@@ -136,8 +139,8 @@ def energy_vad(
             output_frames.append(audio[start:end])
 
     if not output_frames:
-        logger.warning("VAD removed all audio — returning original (possible silence-only input).")
-        return audio
+        logger.debug("VAD removed all audio — returning empty array.")
+        return np.array([], dtype=np.float32)
 
     return np.concatenate(output_frames)
 
@@ -170,7 +173,8 @@ def webrtcvad_filter(
     audio_int16 = (audio * 32767).astype(np.int16)
 
     speech_chunks = []
-    for i in range(0, len(audio_int16) - frame_samples, frame_samples):
+    # Use len - frame_samples + 1 so the last complete frame is included
+    for i in range(0, len(audio_int16) - frame_samples + 1, frame_samples):
         frame = audio_int16[i: i + frame_samples]
         frame_bytes = frame.tobytes()
         try:
@@ -180,8 +184,8 @@ def webrtcvad_filter(
             speech_chunks.append(audio[i: i + frame_samples])
 
     if not speech_chunks:
-        logger.warning("WebRTC VAD found no speech — returning original audio.")
-        return audio
+        logger.debug("WebRTC VAD found no speech — returning empty array.")
+        return np.array([], dtype=np.float32)
 
     return np.concatenate(speech_chunks)
 
@@ -199,7 +203,10 @@ def chunk_audio(
     Each chunk is exactly chunk_samples long (zero-padded at end if needed).
     """
     chunk_samples = int(sr * chunk_duration)
-    hop_samples = int(chunk_samples * (1 - overlap_ratio))
+    # Clamp overlap_ratio to [0.0, 0.99] before computing hop to prevent
+    # a zero or negative hop that would cause an infinite loop.
+    safe_overlap = max(0.0, min(overlap_ratio, 0.99))
+    hop_samples = max(1, int(chunk_samples * (1.0 - safe_overlap)))
 
     if len(audio) < chunk_samples:
         # Pad short audio to full chunk size
@@ -240,6 +247,9 @@ def preprocess_audio(
 
     Returns preprocessed float32 mono waveform at target_sr.
     """
+    if audio is None or audio.size == 0:
+        return np.array([], dtype=np.float32)
+
     audio = to_mono(audio)
     audio = resample(audio, orig_sr=sr, target_sr=target_sr)
     audio = normalize(audio, method=normalize_method)
@@ -250,7 +260,8 @@ def preprocess_audio(
     if apply_vad:
         audio = webrtcvad_filter(audio, sr=target_sr, aggressiveness=vad_aggressiveness)
         # Re-normalize after VAD since amplitude may shift
-        audio = normalize(audio, method=normalize_method)
+        if audio.size > 0:
+            audio = normalize(audio, method=normalize_method)
 
     return audio.astype(np.float32)
 
@@ -267,8 +278,12 @@ def bytes_to_float32(
     dtype: the PCM format of the incoming bytes ('int16' or 'float32')
     """
     if dtype == "int16":
+        if len(raw_bytes) % 2 != 0:
+            raw_bytes = raw_bytes[: len(raw_bytes) - (len(raw_bytes) % 2)]
         audio = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     elif dtype == "float32":
+        if len(raw_bytes) % 4 != 0:
+            raw_bytes = raw_bytes[: len(raw_bytes) - (len(raw_bytes) % 4)]
         audio = np.frombuffer(raw_bytes, dtype=np.float32)
     else:
         raise ValueError(f"Unsupported dtype: {dtype}")

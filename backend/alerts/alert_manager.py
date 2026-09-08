@@ -42,6 +42,12 @@ class AlertManager:
         self._notifiers = []
         self._history: List[AlertEvent] = []
         self._session_alerts: Dict[str, List[AlertEvent]] = {}
+        self._last_alert_time: Dict[str, float] = {}
+        
+        # Load config safely
+        from backend.config import get_settings
+        settings = get_settings()
+        self.cooldown_sec = getattr(settings.risk, "alert_cooldown_sec", 15.0)
 
     def register_notifier(self, notifier) -> None:
         """Register a notifier (WebSocket, webhook, etc.)."""
@@ -80,6 +86,20 @@ class AlertManager:
 
         self._history.append(event)
         self._session_alerts.setdefault(session_id, []).append(event)
+        
+        # Alert Deduplication / Cooldown Logic for CRITICAL alerts
+        is_critical = (event.alert_level == AlertLevel.CRITICAL.value if hasattr(AlertLevel.CRITICAL, 'value') else str(AlertLevel.CRITICAL))
+        
+        if is_critical:
+            last_time = self._last_alert_time.get(session_id, 0.0)
+            if time.time() - last_time < self.cooldown_sec:
+                # Still within cooldown, suppress dispatching duplicate high-priority alerts
+                logger.debug(f"Suppressing duplicate critical alert for session {session_id} due to cooldown.")
+                # We can still send it as HIGH instead of dropping completely, or tag it as suppressed
+                # For now, we update the event to indicate it's suppressed from major UI interruption
+                event.recommendation["suppressed"] = True
+            else:
+                self._last_alert_time[session_id] = time.time()
 
         # Notify all registered notifiers
         for notifier in self._notifiers:
@@ -122,3 +142,4 @@ class AlertManager:
     def clear_session(self, session_id: str) -> None:
         """Remove alert history for a completed session."""
         self._session_alerts.pop(session_id, None)
+        self._last_alert_time.pop(session_id, None)

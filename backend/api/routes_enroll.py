@@ -73,6 +73,7 @@ async def enroll_speaker(
 
     embeddings = []
     processed_count = 0
+    skipped_count = 0
 
     for upload in files:
         suffix = os.path.splitext(upload.filename or "audio")[1] or ".wav"
@@ -94,18 +95,37 @@ async def enroll_speaker(
                 sr=app_settings.audio.sample_rate,
                 model_name=app_settings.detection.ecapa_model,
             )
-            embeddings.append(emb)
-            processed_count += 1
+            # extract_speaker_embedding returns None on failure.
+            # A zero-norm vector is also invalid (should not occur now, but check defensively).
+            if emb is None:
+                logger.warning(
+                    f"ECAPA returned None for {upload.filename} — skipping (ECAPA unavailable)."
+                )
+                skipped_count += 1
+            elif np.linalg.norm(emb) < 1e-8:
+                logger.warning(
+                    f"Zero-norm embedding for {upload.filename} — skipping (invalid embedding)."
+                )
+                skipped_count += 1
+            else:
+                embeddings.append(emb)
+                processed_count += 1
         except Exception as exc:
             logger.warning(f"Failed to process enrollment file {upload.filename}: {exc}")
+            skipped_count += 1
         finally:
-            os.unlink(tmp_path)  # Privacy: delete temp file immediately
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)  # Privacy: delete temp file immediately
 
     if not embeddings:
-        raise HTTPException(
-            status_code=422,
-            detail="Could not extract speaker embeddings from any uploaded file."
+        detail = (
+            "Could not extract valid speaker embeddings from any uploaded file. "
+            "This may mean ECAPA-TDNN is not loaded (run scripts/download_models.py) "
+            "or all uploaded files were silent or corrupt."
         )
+        if skipped_count > 0:
+            detail += f" ({skipped_count} file(s) produced invalid embeddings and were skipped.)"
+        raise HTTPException(status_code=422, detail=detail)
 
     # Average embeddings into profile
     avg_embedding = average_embeddings(embeddings)
@@ -128,8 +148,9 @@ async def enroll_speaker(
         name=name,
         num_samples=processed_count,
         message=(
-            f"Speaker '{name}' enrolled successfully with {processed_count} samples. "
+            f"Speaker '{name}' enrolled successfully with {processed_count} valid sample(s). "
             f"Speaker ID: {final_speaker_id}"
+            + (f" ({skipped_count} sample(s) skipped due to invalid embeddings.)" if skipped_count else "")
         ),
     )
 

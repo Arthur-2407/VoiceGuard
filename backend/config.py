@@ -40,7 +40,7 @@ def _load_yaml() -> dict:
 class AudioConfig:
     sample_rate: int = 16000
     chunk_duration_sec: float = 2.0
-    overlap_ratio: float = 0.5
+    overlap_ratio: float = 0.8  # Increased from 0.5 for faster sliding window
     channels: int = 1
     format: str = "float32"
     vad_aggressiveness: int = 2
@@ -51,6 +51,7 @@ class AlertThresholds:
     low: float = 0.35
     medium: float = 0.60
     high: float = 0.80
+    critical: float = 0.95
 
 
 @dataclass
@@ -68,9 +69,12 @@ class DetectionConfig:
 
 @dataclass
 class RiskConfig:
-    window_size: int = 5
+    window_size: int = 3  # Reduced from 5
     detection_weight: float = 0.70
     consistency_weight: float = 0.30
+    temporal_smoothing: bool = True
+    smoothing_alpha: float = 0.7  # Increased from 0.3 for faster response
+    alert_cooldown_sec: float = 15.0
     alert_thresholds: AlertThresholds = field(default_factory=AlertThresholds)
 
 
@@ -149,7 +153,7 @@ def _build_settings(raw: dict) -> Settings:
         audio=AudioConfig(
             sample_rate=audio_raw.get("sample_rate", 16000),
             chunk_duration_sec=audio_raw.get("chunk_duration_sec", 2.0),
-            overlap_ratio=audio_raw.get("overlap_ratio", 0.5),
+            overlap_ratio=audio_raw.get("overlap_ratio", 0.8),
             channels=audio_raw.get("channels", 1),
             format=audio_raw.get("format", "float32"),
             vad_aggressiveness=audio_raw.get("vad_aggressiveness", 2),
@@ -166,13 +170,17 @@ def _build_settings(raw: dict) -> Settings:
             ecapa_model=detection_raw.get("ecapa_model", "speechbrain/spkrec-ecapa-voxceleb"),
         ),
         risk=RiskConfig(
-            window_size=risk_raw.get("window_size", 5),
+            window_size=risk_raw.get("window_size", 3),
             detection_weight=risk_raw.get("detection_weight", 0.70),
             consistency_weight=risk_raw.get("consistency_weight", 0.30),
+            temporal_smoothing=risk_raw.get("temporal_smoothing", True),
+            smoothing_alpha=risk_raw.get("smoothing_alpha", 0.7),
+            alert_cooldown_sec=risk_raw.get("alert_cooldown_sec", 15.0),
             alert_thresholds=AlertThresholds(
                 low=thresholds_raw.get("low", 0.35),
                 medium=thresholds_raw.get("medium", 0.60),
                 high=thresholds_raw.get("high", 0.80),
+                critical=thresholds_raw.get("critical", 0.95),
             ),
         ),
         speaker=SpeakerConfig(

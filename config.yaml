@@ -1,7 +1,7 @@
 audio:
   sample_rate: 16000
   chunk_duration_sec: 2.0
-  overlap_ratio: 0.5
+  overlap_ratio: 0.8
   channels: 1
   format: float32
   # VAD aggressiveness: 0 (least aggressive) to 3 (most aggressive)
@@ -26,15 +26,22 @@ detection:
 
 risk:
   # Number of chunks to keep in rolling window for aggregation
-  window_size: 5
+  window_size: 3
   # Weight of detection score vs. speaker consistency (must sum to 1.0)
   detection_weight: 0.70
   consistency_weight: 0.30
+  # Exponential smoothing enabled for combined risk
+  temporal_smoothing: true
+  # Smoothing factor (alpha). Lower is smoother/slower.
+  smoothing_alpha: 0.7
+  # Minimum seconds between critical alerts to avoid spam
+  alert_cooldown_sec: 15.0
   # Alert thresholds (risk score 0.0–1.0)
   alert_thresholds:
     low: 0.35
     medium: 0.60
     high: 0.80
+    critical: 0.95
 
 speaker:
   # ECAPA embedding dimension

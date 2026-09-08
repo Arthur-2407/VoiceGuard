@@ -69,7 +69,7 @@ fun SplashScreen(navController: NavController, viewModel: MainViewModel) {
         Spacer(modifier = Modifier.height(48.dp))
         
         when (state) {
-            ConnectionState.DISCOVERING, ConnectionState.CONNECTING -> {
+            ConnectionState.DISCOVERING, ConnectionState.NODE_FOUND, ConnectionState.VALIDATING -> {
                 Box(
                     modifier = Modifier
                         .size(64.dp)
@@ -86,12 +86,18 @@ fun SplashScreen(navController: NavController, viewModel: MainViewModel) {
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = if (state == ConnectionState.DISCOVERING) "SCANNING LOCAL NETWORK..." else "ESTABLISHING SECURE UPLINK...",
+                    text = when (state) {
+                        ConnectionState.DISCOVERING -> "SCANNING LOCAL NETWORK..."
+                        ConnectionState.NODE_FOUND -> "VOICEGUARD NODE FOUND..."
+                        ConnectionState.VALIDATING -> "VALIDATING SECURE UPLINK..."
+                        else -> "ESTABLISHING CONNECTION..."
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary
                 )
             }
-            ConnectionState.ERROR, ConnectionState.DISCONNECTED -> {
+            ConnectionState.ERROR, ConnectionState.DISCONNECTED, ConnectionState.NETWORK_UNAVAILABLE,
+            ConnectionState.DISCOVERY_TIMEOUT, ConnectionState.BACKEND_UNREACHABLE, ConnectionState.BACKEND_UNHEALTHY -> {
                 Icon(
                     imageVector = Icons.Default.Warning,
                     contentDescription = "Connection Failed",
@@ -100,12 +106,23 @@ fun SplashScreen(navController: NavController, viewModel: MainViewModel) {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "NODE DISCOVERY FAILED",
+                    text = when (state) {
+                        ConnectionState.NETWORK_UNAVAILABLE -> "LOCAL NETWORK UNAVAILABLE"
+                        ConnectionState.DISCOVERY_TIMEOUT -> "DISCOVERY TIMEOUT"
+                        ConnectionState.BACKEND_UNREACHABLE -> "BACKEND UNREACHABLE"
+                        ConnectionState.BACKEND_UNHEALTHY -> "BACKEND UNHEALTHY"
+                        else -> "NODE DISCOVERY FAILED"
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     color = StatusWarning
                 )
                 Text(
-                    text = "Ensure VoiceGuard PC is running and accessible on the local network.",
+                    text = when (state) {
+                        ConnectionState.NETWORK_UNAVAILABLE -> "Ensure Wi-Fi or Ethernet is connected and active."
+                        ConnectionState.BACKEND_UNREACHABLE -> "VoiceGuard PC was found on the network, but the port is unreachable. Check firewall settings."
+                        ConnectionState.BACKEND_UNHEALTHY -> "VoiceGuard PC is reachable, but the health validation failed."
+                        else -> "Ensure VoiceGuard PC is running and accessible on the local network."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
